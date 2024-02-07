@@ -1,0 +1,11 @@
+shapely
+numpy
+DSSATTools
+pandas
+tqdm
+rasterio
+netCDF4
+geopandas
+cdsapi
+gdal
+psycopg2 
