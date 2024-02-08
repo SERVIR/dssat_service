@@ -1,3 +1,6 @@
+"""
+This module contains the functions to download data.
+"""
 import cdsapi
 import zipfile
 import tempfile
@@ -13,12 +16,12 @@ TMP = tempfile.gettempdir()
 c = cdsapi.Client()
 
 VARIABLES_ERA5_API = {
-    "TMAX": ('2m_temperature', '24_hour_maximum'),
-    "TMIN": ("2m_temperature", "24_hour_minimum"),
-    "SRAD": ("solar_radiation_flux", False),
-    "RAIN": ("precipitation_flux", False),
-    "TDEW": ("2m_dewpoint_temperature", "24_hour_mean"),
-    "WIND": ("10m_wind_speed", "24_hour_mean")
+    "tmax": ('2m_temperature', '24_hour_maximum'),
+    "tmin": ("2m_temperature", "24_hour_minimum"),
+    "srad": ("solar_radiation_flux", False),
+    "rain": ("precipitation_flux", False),
+    "tdew": ("2m_dewpoint_temperature", "24_hour_mean"),
+    "wind": ("10m_wind_speed", "24_hour_mean")
 }
 
 def download_era5(date:datetime, variable:str, area:list[float], folder:str=TMP):

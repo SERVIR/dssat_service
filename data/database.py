@@ -1,3 +1,6 @@
+"""
+All the database operations are included here. 
+"""
 import psycopg2 as pg
 import geopandas as gpd
 
@@ -5,6 +8,7 @@ import warnings
 import tempfile
 import subprocess
 import os
+from datetime import datetime
 import random
 import string
 
@@ -27,10 +31,33 @@ def create_schema(dbname, schema):
     con.close()
     return
 
-def create_table(schema, table):
-    return 
-
-def add_column(schema, table, column, type):
+def create_reanalysis_table(dbname, schema, table):
+    """Creates a new table"""
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1} (
+            rast RASTER NOT NULL, 
+            fdate DATE NOT NULL,
+            rid SERIAL NOT NULL
+        );
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_time ON {0}.{1} (fdate);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_rid ON {0}.{1} (rid);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_spatial ON {0}.{1} USING GIST (ST_Envelope(rast));
+        """.format(schema, table)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
     return 
 
 def schema_exists(dbname, schema):
@@ -86,10 +113,7 @@ def add_country(dbname:str, name:str, shapefile:str,
     gdf = gdf.rename(columns={admin1: "admin1"})
     gdf["geometry"] = gdf.geometry.simplify(0.01)
 
-    # tmp_folder = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    # tmp_folder = os.path.join(TMP, tmp_folder)
     tmp_dir = tempfile.TemporaryDirectory()
-    # os.mkdir(tmp_folder)
     tmp_shp = os.path.join(tmp_dir.name, "file.shp")
     gdf.to_file(tmp_shp, crs=4326)
 
@@ -105,6 +129,149 @@ def add_country(dbname:str, name:str, shapefile:str,
     )
     out, err = proc.communicate()
     tmp_dir.cleanup()
-    return  
 
+    # Create a materialized view for the envelope
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE MATERIALIZED VIEW {0}.bbox
+        AS (
+            SELECT ST_AsText(ST_Envelope(ST_Union(geom))) AS bbox 
+            FROM {0}.admin
+        );
+        """.format(name)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return
 
+def get_envelope(dbname:str, schema:str, pad=0.1):
+    """
+    Get the envelope for the region. Envelope was previously created
+    as a materialized view
+    """
+    con = connect(dbname)
+    cur = con.cursor()
+    query = "SELECT * from {0}.bbox;".format(schema)
+    cur.execute(query)
+    out = cur.fetchall()
+    cur.close()
+    con.close()
+    bbox = out[0][0]
+    bbox = bbox.split("((")[-1].split("))")[0]
+    bbox = list(map(lambda x: x.split(), bbox.split(",")))
+    bbox = [bbox[1][1], bbox[0][0], bbox[0][1], bbox[2][0]]
+    bbox = list(map(float, bbox))
+    bbox = [bbox[0]+pad, bbox[1]-pad, bbox[2]-pad, bbox[3]+pad]
+    return bbox
+
+def delete_rasters(dbname, schema, table, date):
+    """If date already exists delete associated rasters before ingesting."""
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        SELECT * FROM {0}.{1}
+        WHERE
+            fdate='{2}'
+        """.format(schema, table, date.strftime('%Y-%m-%d'))
+    cur.execute(query)
+    if bool(cur.rowcount):
+        # TODO: This has to go in a log
+        warnings.warn("Overwriting raster in {0}.{1} table for {1}".format(
+            schema, table, date.strftime("%Y-%m-%d")
+        ))
+        query = """
+            DELETE FROM {0}.{1} 
+            WHERE
+                fdate='{2}'
+            """.format(schema, table, date.strftime("%Y-%m-%d"))
+        cur.execute(query)
+        con.commit()
+    cur.close()
+    con.close()
+
+def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str, 
+               date:datetime, column:str="rast", ens:int=None):
+    """
+    Saves tiff to the database.
+
+    Arguments
+    ----------
+    tiffpath: str
+        Path to the tiff file
+    dbname: str
+        Name of the database
+    schema: str
+        Schema where the raster will be saved
+    table: str
+        Table where the raster will be saved
+    column: str
+        Name of the column where the raster will be located. This is useful
+        for cases when there is more than one raster per row, which would be the 
+        case of weather data when the raster domain is the same. If None, then 
+        column would be named rast.
+    ens: int
+        Ensemble number. It is used when ensemble-based datasets are used.
+    """ 
+    con = connect(dbname)
+    cur = con.cursor()
+
+    temptable = ''.join(random.SystemRandom().choice(string.ascii_letters) for _ in range(8))
+    cmd = f"raster2pgsql -d -s 4326 -t 10x10 {tiffpath} {temptable} | psql -d {dbname}"
+    proc = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+    )
+    out, err = proc.communicate()
+    try:
+        # TODO: Need to create log
+        query = """
+            ALTER TABLE {0} ADD COLUMN fdate DATE
+            """.format(temptable)
+        cur.execute(query)
+        # TODO: Add ens column when necessary
+        query = """
+            UPDATE {0} SET fdate = date '{1}'
+            """.format(temptable, date.strftime("%Y-%m-%d"))
+        cur.execute(query)
+        # Create raster, spatial and time indexes
+        query = """
+            CREATE INDEX {0}_rid ON {1} (rid);
+            """.format(table, temptable)
+        cur.execute(query)
+        query = """
+            CREATE INDEX {0}_spatial ON {1} USING GIST (ST_Envelope(rast));
+            """.format(table, temptable)
+        cur.execute(query)
+        query = """
+            CREATE INDEX {0}_time ON {1} (fdate);
+            """.format(table, temptable)
+        cur.execute(query)
+        # Copy to 
+        query = """
+            INSERT INTO {0}.{1}(rid, rast, fdate) (SELECT rid, rast, fdate  FROM {2});
+            """.format(schema, table, temptable)
+        cur.execute(query)
+        con.commit()
+    finally:
+        query = """
+            DROP TABLE {0};
+            """.format(temptable)
+        cur.execute(query)
+        con.commit()
+    cur.close()
+    con.close()
+    return
+
+def verify_series_continuity(dbname:str, shcema:str, table:str, 
+                             datefrom:datetime, dateto:datetime):
+    """
+    Verify if there is continous record of weather series. It returns the 
+    missing dates on the requested period
+    """
+
+def ingest_soils(dbname:str, schema:str, solfile:str, cropmask1:str,
+                 cropmask2:str):
+    """
+    
+    """
