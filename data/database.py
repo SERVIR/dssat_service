@@ -12,6 +12,15 @@ from datetime import datetime
 import random
 import string
 
+VARIABLES_ERA5_NC = {
+    "tmax": "Temperature_Air_2m_Max_24h",
+    "tmin": "Temperature_Air_2m_Min_24h",
+    "rain": "Precipitation_Flux",
+    "srad": "Solar_Radiation_Flux",
+    # "wind": "Wind_Speed_10m_Mean",
+    # "tdew": "Dew_Point_Temperature_2m_Mean"   
+}
+
 TMP = tempfile.gettempdir()
 
 def connect(dbname):
@@ -31,15 +40,15 @@ def create_schema(dbname, schema):
     con.close()
     return
 
-def create_reanalysis_table(dbname, schema, table):
-    """Creates a new table"""
+def _create_reanalysis_table(dbname, schema, table):
+    """Creates a renalysis table"""
     con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
-            rast RASTER NOT NULL, 
-            fdate DATE NOT NULL,
-            rid SERIAL NOT NULL
+            rast raster NOT NULL, 
+            fdate date NOT NULL,
+            rid serial NOT NULL
         );
         """.format(schema, table)
     cur.execute(query)
@@ -53,6 +62,38 @@ def create_reanalysis_table(dbname, schema, table):
     cur.execute(query)
     query = """
         CREATE INDEX {1}_spatial ON {0}.{1} USING GIST (ST_Envelope(rast));
+        """.format(schema, table)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return 
+
+def _create_soil_table(dbname, schema):
+    """Creates soil table"""
+    table = "soil"
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1} (
+            gid serial PRIMARY KEY, 
+            geom geometry (POINT, 4326),
+            mask1 boolean,
+            mask2 boolean,
+            soil text
+        );
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_mask1 ON {0}.{1} (mask1);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_mask2 ON {0}.{1} (mask2);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_spatial ON {0}.{1} USING GIST (geom);
         """.format(schema, table)
     cur.execute(query)
     con.commit()
@@ -97,7 +138,7 @@ def add_country(dbname:str, name:str, shapefile:str,
     tables empty tables it'll need to support the service. The funciton loads
     the shp into the name.admin table, and it simplifies the geometries.
 
-     Arguments
+    Arguments
     ----------
     dbname: str
         Name of the database
@@ -106,7 +147,9 @@ def add_country(dbname:str, name:str, shapefile:str,
     shapefile: str
         Path to the shapefile with the administrative divions of the country.
         The shapefile must contain a valid geometry, and at least a "admin_1"
-        field to indicate the name of the subdivisions. 
+        field to indicate the name of the subdivisions.
+    admin1: str
+        Name of the admin1 division.
     """
     gdf = gpd.read_file(shapefile)
     assert admin1 in gdf.columns, f"{admin1} column not in shapefile"
@@ -142,6 +185,13 @@ def add_country(dbname:str, name:str, shapefile:str,
         """.format(name)
     cur.execute(query)
     con.commit()
+
+    # Create tables
+    for var in VARIABLES_ERA5_NC.keys():
+        if not table_exists(dbname, name, f"era5_{var}"):
+            _create_reanalysis_table(dbname, name, f"era5_{var}")
+    if not table_exists(dbname, name, f"soil"):
+        _create_soil_table(dbname, name)
     cur.close()
     con.close()
     return
