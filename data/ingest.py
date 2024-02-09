@@ -5,11 +5,17 @@ download, transform, and ingestion process.
 from datetime import datetime, timedelta
 import os 
 
-from . import database as db
-from .database import VARIABLES_ERA5_NC
+import sys
+sys.path.append("..")
+import database as db
+
 from . import download
 from . import transform
 from tqdm import tqdm
+
+import rasterio as rio
+
+VARIABLES_ERA5_NC = db.VARIABLES_ERA5_NC
 
 def ingest_era5_record(dbname:str, schema:str, date:datetime):
     """
@@ -68,6 +74,8 @@ def ingest_soil(dbname:str, schema:str, soilfile:str, mask1:str,
     """
     with open(soilfile, "r") as f:
         soil_lines = f.readlines()
+    ds_mask1 = rio.open(mask1)
+    ds_mask2 = rio.open(mask2)
 
     allProfile = False
     soilProfile_lines = []
@@ -87,12 +95,18 @@ def ingest_soil(dbname:str, schema:str, soilfile:str, mask1:str,
 
         if allProfile:
             lat, lon = map(float, soilProfile_lines[2][25:42].split())
+            mask1_value = ds_mask1.sample([(lon, lat)]).__next__()
+            mask1_value = repr(any(mask1_value)).upper()
+            mask2_value = ds_mask2.sample([(lon, lat)]).__next__()
+            mask2_value = repr(any(mask2_value)).upper()
+            # TODO: Raise if the point is not in crop mask
             soilProfile_lines = "".join(soilProfile_lines)
             # Write to DB
             query = """
                 INSERT INTO {0}.soil(geom, mask1, mask2, soil) 
-                VALUES (ST_Point({1}, {2}), TRUE, TRUE, '{3}');
-                """.format(schema, lon, lat, soilProfile_lines)
+                VALUES (ST_Point({1}, {2}), {3}, {4}, '{5}');
+                """.format(schema, lon, lat, mask1_value, mask2_value, 
+                           soilProfile_lines)
             cur.execute(query)
             con.commit()
             allProfile = False
