@@ -13,6 +13,7 @@ from itertools import product
 import tempfile
 import os
 import shutil
+from tqdm import tqdm
 
 
 MIN_SAMPLES = 4
@@ -49,16 +50,16 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         weather pixels are shuffled and randomly selected.
     """
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
-
+    con = db.connect(dbname)
     # Get soils and verify a minimum number of pixel samples
-    soils = db.get_soils(dbname, schema, admin1, 1)
+    soils = db.get_soils(con, schema, admin1, 1)
     if len(soils) < MIN_SAMPLES:
-       soils = db.get_soils(dbname, schema, admin1, 2)
+       soils = db.get_soils(con, schema, admin1, 2)
        if len(soils) < MIN_SAMPLES:
-          soils = db.get_soils(dbname, schema, admin1, None)
+          soils = db.get_soils(con, schema, admin1, None)
           assert len(soils) < MIN_SAMPLES, \
             f"Region is not large enough to have at least {MIN_SAMPLES} samples"
-    
+
     pixels = soils.apply(lambda row: (row.lon, row.lat), axis=1)
     n_pixels = len(pixels)
     if all_random:
@@ -73,21 +74,22 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     else:
         nens = min(nens, n_pixels)
         soil_pixels = weather_pixels = pixels.sample(nens, replace=False)
-    
+
     # tmpdir to save wth files
     tmp_dir = tempfile.TemporaryDirectory()
-
     # Add treatments
     gs = GSRun()
-    for n, (soil, weather) in enumerate(zip(soil_pixels, weather_pixels)):
+    
+    for (n, (soil, weather)) in tqdm(list(enumerate(zip(soil_pixels, weather_pixels)))):
         soil_profile = soils.loc[
             (soils.lon==soil[0]) & (soils.lat==soil[1]),
             "soil" 
         ].values[0]
         weather_df = db.get_era5_for_point(
-            dbname, schema, weather[0], weather[1], 
+            con, schema, weather[0], weather[1], 
             plantingdate, end_date
         )
+
         if weather_df is None:
             # In the unlikely case that there is no data for that location.
             # This can occur in soil pixels that are near coasts or very close
@@ -98,11 +100,12 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         weather_df["srad"] /= 1e6
         weather_df["rain"] = weather_df.rain.abs()
 
-        weather_df = weather_df.sort_index()
+        # weather_df = weather_df.sort_index()
         weather_df.index = pd.to_datetime(weather_df.index)
         pars = {i: i.upper() for i in weather_df.columns}
         dssat_weather = Weather(weather_df, pars, weather[1], weather[0])
         dssat_weather._name = f"WSTA{n:04}"
+
         dssat_weather.write(tmp_dir.name)
 
         gs.add_treatment(
@@ -113,9 +116,11 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
             cultivar=cultivar
         )
     # Run DSSAT
+    con.close()
+    
     out = gs.run()
-    shutil.rmtree(gs.RUN_PATH)
     tmp_dir.cleanup()
+    print("")
     return out
         
 

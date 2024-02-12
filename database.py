@@ -316,14 +316,13 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
     con.close()
     return
 
-def verify_series_continuity(dbname:str, schema:str, table:str, 
+def verify_series_continuity(con, schema:str, table:str, 
                              datefrom:datetime, dateto:datetime):
     """
     Verify if there is continous record of weather series. It returns the 
     missing dates on the requested period
     """
     dates = date_range(start=datefrom, end=dateto).date
-    con = connect(dbname)
     cur = con.cursor()
     query = """
         SELECT DISTINCT(fdate) FROM {0}.{1}
@@ -337,11 +336,10 @@ def verify_series_continuity(dbname:str, schema:str, table:str,
     dates_db = [row[0] for row in dates_db]
     dates_notin_db = list(filter(lambda x: x not in dates_db, dates))
     cur.close()
-    con.close()
     return dates_notin_db
     
 
-def get_era5_for_point(dbname:str, schema:str, lon:float, lat:float,
+def get_era5_for_point(con, schema:str, lon:float, lat:float,
                        datefrom:datetime, dateto:datetime):
     """
     Get the weather series for the requested point and time period. It returns 
@@ -352,7 +350,7 @@ def get_era5_for_point(dbname:str, schema:str, lon:float, lat:float,
     for var in VARIABLES_ERA5_NC.keys():
         table = f"era5_{var}"
         dates_notin_db = verify_series_continuity(
-            dbname, schema, table, datefrom, dateto
+            con, schema, table, datefrom, dateto
         )
         assert len(dates_notin_db) == 0, \
             f"Dates are missing in {table}: {dates_notin_db}. Ingest that data first"
@@ -362,30 +360,10 @@ def get_era5_for_point(dbname:str, schema:str, lon:float, lat:float,
     variables = list(VARIABLES_ERA5_NC.keys())
     var = variables[0]
 
-    con = connect(dbname)
     cur = con.cursor()
-    query = """
-        SELECT rid, fdate, ST_value(ra.rast, pn.pt_geom) AS val
-        FROM {0}.era5_{1} AS ra,
-            (
-                SELECT ST_SetSRID(ST_Point({2}, {3}), 4326) AS pt_geom
-            ) AS pn
-        WHERE
-            ST_Intersects(pn.pt_geom, rast)
-            AND fdate>=date '{4}' AND fdate<=date '{5}'
-        ORDER BY fdate
-        """.format(schema, var, lon, lat, datefrom.strftime("%Y-%m-%d"),
-                   dateto.strftime("%Y-%m-%d"))
-    cur.execute(query)
-    rows = np.array(cur.fetchall())
-    # Check that there is a single rid. If there are more than one rid, then
-    # the rasters have been stored in different tile partitions
-    rid = list(set(np.array(rows)[:,0]))
-    assert len(rid) == 1, "There are multiple tiles for that point"
-    rid = rid[0]
-
-    df[var] = Series(rows[:, 2], index=rows[:, 1])
-    for var in variables[1:]:
+    import time
+    times = []
+    for var in variables:
         query = """
         SELECT fdate, ST_value(ra.rast, pn.pt_geom) AS val
         FROM {0}.era5_{1} AS ra,
@@ -393,23 +371,23 @@ def get_era5_for_point(dbname:str, schema:str, lon:float, lat:float,
                 SELECT ST_SetSRID(ST_Point({2}, {3}), 4326) AS pt_geom
             ) AS pn
         WHERE
-            rid={4}
-            AND fdate>=date '{5}' AND fdate<=date '{6}'
-        ORDER BY fdate
-        """.format(schema, var, lon, lat, rid, datefrom.strftime("%Y-%m-%d"),
+            ST_Within(pn.pt_geom, ST_Envelope(rast))
+            AND fdate>=date '{4}' AND fdate<=date '{5}'
+        """.format(schema, var, lon, lat, datefrom.strftime("%Y-%m-%d"),
                    dateto.strftime("%Y-%m-%d"))
+        time0 = time.time()
         cur.execute(query)
+        times.append(time.time() - time0)
         rows = np.array(cur.fetchall())
         df[var] = Series(rows[:, 1], index=rows[:, 0])
     
     cur.close()
-    con.close()
     if df.isna().any().any():
         warnings.warn("Data is NULL at location")
         return
-    return df
+    return df.sort_index()
 
-def get_soils(dbname:str, schema:str, admin1:str, mask:int=None):
+def get_soils(con, schema:str, admin1:str, mask:int=None):
     """
     Return the soils for a region (admin1). If mask is 1, then it'll return
     only the soil points included in mask1, and same case if mask is 2 but
@@ -419,7 +397,6 @@ def get_soils(dbname:str, schema:str, admin1:str, mask:int=None):
         mask_query = ""
     else:
         mask_query = f"AND so.mask{mask}=TRUE"
-    con = connect(dbname)
     cur = con.cursor()
     query = """
         SELECT ST_X(so.geom), ST_Y(so.geom), so.soil, so.mask1, so.mask2 
@@ -432,6 +409,7 @@ def get_soils(dbname:str, schema:str, admin1:str, mask:int=None):
     cur.execute(query)
     rows = cur.fetchall()
     df = DataFrame(rows, columns=["lon", "lat", "soil", "mask1", "mask2"])
+    cur.close()
     return df
 
             
