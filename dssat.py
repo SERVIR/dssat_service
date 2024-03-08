@@ -49,6 +49,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         If false soil and weather are from the same pixel. If true soil and
         weather pixels are shuffled and randomly selected.
     """
+    # Simulation will start 30 days prior (As sugested by Ines et al., 2013)
+    start_date = plantingdate - timedelta(days=30)
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
     con = db.connect(dbname)
     # Get soils and verify a minimum number of pixel samples
@@ -87,7 +89,7 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         ].values[0]
         weather_df = db.get_era5_for_point(
             con, schema, weather[0], weather[1], 
-            plantingdate, end_date
+            start_date, end_date
         )
 
         if weather_df is None:
@@ -103,8 +105,15 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         # weather_df = weather_df.sort_index()
         weather_df.index = pd.to_datetime(weather_df.index)
         pars = {i: i.upper() for i in weather_df.columns}
-        dssat_weather = Weather(weather_df, pars, weather[1], weather[0])
-        dssat_weather._name = f"WSTA{n:04}"
+        # Weather class checks data consistency. If some inconsistency is found 
+        # (for example Tmax < Tmin) it will raise an error. It is not unusual to
+        # to find small inconsistencies in global datasets.  Then, in case that 
+        # there is an inconsitency, that pixel will be skiped.
+        try:
+            dssat_weather = Weather(weather_df, pars, weather[1], weather[0])
+        except AssertionError:
+            continue
+        dssat_weather._name = f"WS{n:02}{dssat_weather._name[4:]}"
 
         dssat_weather.write(tmp_dir.name)
 
@@ -118,7 +127,7 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     # Run DSSAT
     con.close()
     
-    out = gs.run()
+    out = gs.run(start_date=start_date)
     tmp_dir.cleanup()
     print("")
     return out
