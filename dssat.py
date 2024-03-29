@@ -81,6 +81,10 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     tmp_dir = tempfile.TemporaryDirectory()
     # Add treatments
     gs = GSRun()
+
+    # Check if TAVG and TAMP are in static table
+    tav_exists = db.verify_static_par_exists(dbname, schema, "tav")
+    tamp_exists = db.verify_static_par_exists(dbname, schema, "tamp")
     
     for (n, (soil, weather)) in tqdm(list(enumerate(zip(soil_pixels, weather_pixels)))):
         soil_profile = soils.loc[
@@ -91,6 +95,12 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
             con, schema, weather[0], weather[1], 
             start_date, end_date
         )
+        if tav_exists and tamp_exists:
+            tav = db.get_static_par(con, schema, weather[0], weather[1], "tav")
+            tamp = db.get_static_par(con, schema, weather[0], weather[1], "tamp")
+        else:
+            tav = None
+            tamp = None
 
         if weather_df is None:
             # In the unlikely case that there is no data for that location.
@@ -110,7 +120,10 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         # to find small inconsistencies in global datasets.  Then, in case that 
         # there is an inconsitency, that pixel will be skiped.
         try:
-            dssat_weather = Weather(weather_df, pars, weather[1], weather[0])
+            dssat_weather = Weather(
+                weather_df, pars, weather[1], weather[0],
+                tav=tav, amp=tamp
+                )
         except AssertionError:
             continue
         dssat_weather._name = f"WS{n:02}{dssat_weather._name[4:]}"

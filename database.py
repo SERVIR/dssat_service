@@ -375,6 +375,8 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
 
 def verify_static_par_exists(dbname:str, schema:str, parname:str):
     """It will raise an error if the static parameter already exists"""
+    if not table_exists(dbname, schema, "static"):
+        return False
     con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -384,8 +386,8 @@ def verify_static_par_exists(dbname:str, schema:str, parname:str):
     rows = cur.fetchall()
     cur.close()
     con.close()
-    assert len(rows) == 0, \
-        f"{parname} already in static table. Remove it before ingesting it back"
+    return len(rows) > 0
+        
 
 def verify_series_continuity(con, schema:str, table:str, 
                              datefrom:datetime, dateto:datetime):
@@ -417,7 +419,6 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
     a dict containing the series for each weather variable. It returns a df with
     the time series for that point.
     """
-    df = DataFrame()
     for var in VARIABLES_ERA5_NC.keys():
         table = f"era5_{var}"
         dates_notin_db = verify_series_continuity(
@@ -433,7 +434,7 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
 
     cur = con.cursor()
     import time
-    times = []
+    df = DataFrame()
     for var in variables:
         query = """
         SELECT fdate, ST_value(ra.rast, pn.pt_geom) AS val
@@ -446,9 +447,7 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
             AND fdate>=date '{4}' AND fdate<=date '{5}'
         """.format(schema, var, lon, lat, datefrom.strftime("%Y-%m-%d"),
                    dateto.strftime("%Y-%m-%d"))
-        time0 = time.time()
         cur.execute(query)
-        times.append(time.time() - time0)
         rows = np.array(cur.fetchall())
         df[var] = Series(rows[:, 1], index=rows[:, 0])
     
@@ -483,5 +482,24 @@ def get_soils(con, schema:str, admin1:str, mask:int=None):
     cur.close()
     return df
 
-            
+def get_static_par(con, schema:str, lon:float, lat:float, par:str):
+    """Get the static parameter value for a location"""
+    cur = con.cursor()
+    query = """
+        SELECT ST_value(ra.rast, pn.pt_geom) AS val
+        FROM {0}.static AS ra,
+            (
+                SELECT ST_SetSRID(ST_Point({1}, {2}), 4326) AS pt_geom
+            ) AS pn
+        WHERE
+            ST_Within(pn.pt_geom, ST_Envelope(rast))
+            AND par = '{3}'
+        """.format(schema, lon, lat, par)
+    cur.execute(query)
+    rows = np.array(cur.fetchall())
+    cur.close()
+
+    return rows[0][0]
+    
+    
 
