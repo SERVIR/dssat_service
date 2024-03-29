@@ -137,8 +137,9 @@ def ingest_static(dbname:str, schema:str, rast:str, parname:str):
 
     if not db.table_exists(dbname, schema, "static"):
         db.create_static_table(dbname, schema)
-
-    db.verify_static_par_exists(dbname, schema, parname)
+    assert not db.verify_static_par_exists(dbname, schema, parname), \
+        f"{parname} already in static table. Remove it before ingesting it back"
+    
     db.tiff_to_db(
         tiffpath=rast,
         dbname=dbname,
