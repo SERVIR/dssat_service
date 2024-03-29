@@ -1,6 +1,7 @@
 from data.download import download_era5
 from data.ingest import (
-    ingest_era5_record, ingest_era5_series, ingest_soil
+    ingest_era5_record, ingest_era5_series, ingest_soil, 
+    ingest_static
     )
 from database import (
     add_country, _create_soil_table, verify_series_continuity,
@@ -34,7 +35,7 @@ def ingest_era5_data():
     )
 
 def ingest_soil_data():
-    soil_path = "/home/dquintero/dssat_service/data/soil_data/SoilGrids/KE.SOL"
+    soil_path = "/home/dquintero/dssat_service/data/soil_data/iSDASoil/KE.SOL"
     mask1 = "/home/dquintero/dssat_service/data/subsaharanAfrica-maize.tif"
     mask2 = "/home/dquintero/dssat_service/data/subsaharanAfrica-suitableAg-v2.tif"
     # _create_soil_table(dbname, "kenya")
@@ -62,6 +63,13 @@ def run_model():
     print(df)
     print(f"{(time.time() - time0):.3f} seconds running one season")
 
+def ingest_static_data():
+    ingest_static(
+        dbname=dbname,
+        schema="kenya",
+        rast="/home/dquintero/dssat_service/data/weather_data/tav_tamp/tamp_kenya.tif",
+        parname="tamp"
+    )
 
 if __name__ == "__main__":
     # out = verify_series_continuity(
@@ -72,7 +80,9 @@ if __name__ == "__main__":
     #     dateto=datetime(2023, 12, 31)
     # )
     # print(out)
+    # ingest_soil_data()
     # run_model()
-    itime = time.time()
-    ingest_era5_data()
-    print(time.time()-itime)
+    ingest_static_data()
+    # itime = time.time()
+    # ingest_era5_data()
+    # print(time.time()-itime)
