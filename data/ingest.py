@@ -82,6 +82,9 @@ def ingest_soil(dbname:str, schema:str, soilfile:str, mask1:str,
 
     con = db.connect(dbname)
     cur = con.cursor()
+    if not db.table_exists(dbname, schema, f"soil"):
+        db._create_soil_table(dbname, schema)
+
     for line in tqdm(soil_lines):
         if line[0] == "*":
             if len(soilProfile_lines) > 1:
@@ -114,5 +117,33 @@ def ingest_soil(dbname:str, schema:str, soilfile:str, mask1:str,
     cur.close()
     con.close()
 
+def ingest_static(dbname:str, schema:str, rast:str, parname:str):
+    """
+    Ingests static raster data. This data includes any static data exluding soils.
+    It is open to include any static data such as crop masks, planting dates, etc.
+    It was originally created to ingest TAV and TAMP soil parameters for DSSAT.
 
+    Arguments
+    ----------
+    dbname: str
+        Name of the database
+    schema: str
+        Name of the schema (domain or country)
+    rast: str
+        Path to the raster to ingest.
+    parname: str
+        Name of the static variable to ingest. Up to 32 characters
+    """
+
+    if not db.table_exists(dbname, schema, "static"):
+        db.create_static_table(dbname, schema)
+
+    db.verify_static_par_exists(dbname, schema, parname)
+    db.tiff_to_db(
+        tiffpath=rast,
+        dbname=dbname,
+        schema=schema,
+        table="static",
+        par=parname
+    )
 

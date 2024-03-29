@@ -72,6 +72,35 @@ def _create_reanalysis_table(dbname, schema, table):
     con.close()
     return 
 
+def create_static_table(dbname, schema):
+    """Creates table for static rasters"""
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.static (
+            rast raster NOT NULL, 
+            rid serial NOT NULL,
+            par character(32)
+        );
+        """.format(schema)
+    cur.execute(query)
+    query = """
+        CREATE INDEX static_par ON {0}.static (par);
+        """.format(schema)
+    cur.execute(query)
+    query = """
+        CREATE INDEX static_rid ON {0}.static (rid);
+        """.format(schema)
+    cur.execute(query)
+    query = """
+        CREATE INDEX static_spatial ON {0}.static USING GIST (ST_Envelope(rast));
+        """.format(schema)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return 
+
 def _create_soil_table(dbname, schema):
     """Creates soil table"""
     table = "soil"
@@ -245,7 +274,7 @@ def delete_rasters(dbname, schema, table, date):
     con.close()
 
 def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str, 
-               date:datetime, column:str="rast", ens:int=None):
+               date:datetime=None, ens:int=None, par:str=None):
     """
     Saves tiff to the database.
 
@@ -259,16 +288,20 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
         Schema where the raster will be saved
     table: str
         Table where the raster will be saved
-    column: str
-        Name of the column where the raster will be located. This is useful
-        for cases when there is more than one raster per row, which would be the 
-        case of weather data when the raster domain is the same. If None, then 
-        column would be named rast.
+    date: datetime
+        Date for the timeseries rasters (Weather).
     ens: int
         Ensemble number. It is used when ensemble-based datasets are used.
+    par: str
+        Name of the parameter. Only applies for the static rasters.
     """ 
+    assert any((date is not None, par is not None)), \
+        "date must be set for timeseries data. par must be set for static data" 
+    assert not all((date is not None, par is not None)), \
+        "par argument only applies for static data. You must not define date for static data." 
+    if par is not None:
+        assert table == "static", "table must be equal to 'static' for static data."
     con = connect(dbname)
-    cur = con.cursor()
 
     temptable = ''.join(random.SystemRandom().choice(string.ascii_letters) for _ in range(8))
     cmd = f"raster2pgsql -d -s 4326 -t 10x10 {tiffpath} {temptable} | psql -d {dbname}"
@@ -276,18 +309,11 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     out, err = proc.communicate()
+    cur = con.cursor()
     try:
+        columns = ["rid", "rast"]
         # TODO: Need to create log
-        query = """
-            ALTER TABLE {0} ADD COLUMN fdate DATE
-            """.format(temptable)
-        cur.execute(query)
-        # TODO: Add ens column when necessary
-        query = """
-            UPDATE {0} SET fdate = date '{1}'
-            """.format(temptable, date.strftime("%Y-%m-%d"))
-        cur.execute(query)
-        # Create raster, spatial and time indexes
+        # Spatial index
         query = """
             CREATE INDEX {0}_rid ON {1} (rid);
             """.format(table, temptable)
@@ -296,25 +322,70 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
             CREATE INDEX {0}_spatial ON {1} USING GIST (ST_Envelope(rast));
             """.format(table, temptable)
         cur.execute(query)
+        # Time index
+        if date is not None:
+            columns.append("fdate")
+            query = """
+                ALTER TABLE {0} ADD COLUMN fdate DATE
+                """.format(temptable)
+            cur.execute(query)
+            query = """
+                UPDATE {0} SET fdate = date '{1}'
+                """.format(temptable, date.strftime("%Y-%m-%d"))
+            cur.execute(query)
+            query = """
+                CREATE INDEX {0}_time ON {1} (fdate);
+                """.format(table, temptable)
+            cur.execute(query)
+        # Parameter index
+        if par is not None:
+            columns.append("par")
+            query = """
+                ALTER TABLE {0} ADD COLUMN par CHARACTER(32)
+                """.format(temptable)
+            cur.execute(query)
+            query = """
+                UPDATE {0} SET par = '{1}'
+                """.format(temptable, par)
+            cur.execute(query)
+            query = """
+                CREATE INDEX {0}_par ON {1} (par);
+                """.format(table, temptable)
+            cur.execute(query)
+        # TODO: Add ens index when necessary
+        # Copy to permanent table
         query = """
-            CREATE INDEX {0}_time ON {1} (fdate);
-            """.format(table, temptable)
-        cur.execute(query)
-        # Copy to 
-        query = """
-            INSERT INTO {0}.{1}(rid, rast, fdate) (SELECT rid, rast, fdate  FROM {2});
-            """.format(schema, table, temptable)
+            INSERT INTO {0}.{1}({2}) (SELECT {2} FROM {3});
+            """.format(schema, table, ",".join(columns), temptable)
         cur.execute(query)
         con.commit()
+        cur.close()
     finally:
+        con.close() # Closed in case something failed on the try
+        con = connect(dbname)
+        cur = con.cursor()
         query = """
             DROP TABLE {0};
             """.format(temptable)
         cur.execute(query)
         con.commit()
+        cur.close()
+        con.close()
+    return
+
+def verify_static_par_exists(dbname:str, schema:str, parname:str):
+    """It will raise an error if the static parameter already exists"""
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        SELECT 1 FROM {0}.static WHERE par = '{1}';
+        """.format(schema, parname)
+    cur.execute(query)
+    rows = cur.fetchall()
     cur.close()
     con.close()
-    return
+    assert len(rows) == 0, \
+        f"{parname} already in static table. Remove it before ingesting it back"
 
 def verify_series_continuity(con, schema:str, table:str, 
                              datefrom:datetime, dateto:datetime):
