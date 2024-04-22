@@ -22,7 +22,7 @@ MAX_SIM_LENGTH = 6*30 # This is maximum simulation lenght since planting.
 def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
-                      all_random:bool=True):
+                      all_random:bool=True, overview:bool=False):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
     subdivision (admin1). 
@@ -48,6 +48,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     all_random: bool
         If false soil and weather are from the same pixel. If true soil and
         weather pixels are shuffled and randomly selected.
+    overview: bool
+        If true it will return the overview file string
     """
     # Simulation will start 30 days prior (As sugested by Ines et al., 2013)
     start_date = plantingdate - timedelta(days=30)
@@ -142,7 +144,9 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     
     out = gs.run(start_date=start_date)
     tmp_dir.cleanup()
-    print("")
+    # print("")
+    if overview:
+        return out, gs.overview
     return out
         
 
