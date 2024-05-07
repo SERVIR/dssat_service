@@ -7,6 +7,7 @@ from database import (
     add_country, _create_soil_table, verify_series_continuity,
     get_era5_for_point, get_soils, connect
     )
+from data.transform import parse_overview
 from dssat import run_spatial_dssat
 from datetime import datetime
 import psycopg2 as pg
@@ -14,6 +15,7 @@ import psycopg2 as pg
 import os
 import time
 import numpy as np
+import re
 
 variable = "TMAX"
 date = datetime(2024, 1, 2)
@@ -51,16 +53,27 @@ def ingest_soil_data():
 def run_model():
     time0 = time.time()
     # con = connect(dbname)
-    df = run_spatial_dssat(
+    df, overview = run_spatial_dssat(
         dbname=dbname, 
         schema="kenya", 
-        admin1="Baringo",
-        plantingdate=datetime(2021, 9, 1),
+        admin1="Nakuru",
+        plantingdate=datetime(2022, 2, 1),
         cultivar="990002",
-        nitrogen=[(0, 50), (30, 40)]
+        nitrogen=[(5, 20), (30, 10), (50, 10)],
+        overview=True
     )
     # con.close()
-    print(df)
+    df = df.iloc[:, 3:].astype(int).replace(-99, np.nan)
+    print(df.describe())
+    # parse_overview("".join(overview))
+    from collections import Counter
+    print(Counter([l[:7] for l in overview if "Sowing" in l]))
+    N_uptake = [
+        int(re.findall("(\d+)", l)[0]) 
+        for l in overview 
+        if "N uptake during growing season" in l
+    ]
+    print(np.mean(N_uptake), np.std(N_uptake))
     print(f"{(time.time() - time0):.3f} seconds running one season")
 
 def ingest_static_data():
@@ -81,8 +94,8 @@ if __name__ == "__main__":
     # )
     # print(out)
     # ingest_soil_data()
-    # run_model()
-    ingest_static_data()
+    run_model()
+    # ingest_static_data()
     # itime = time.time()
     # ingest_era5_data()
     # print(time.time()-itime)
