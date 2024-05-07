@@ -22,7 +22,8 @@ MAX_SIM_LENGTH = 6*30 # This is maximum simulation lenght since planting.
 def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
-                      all_random:bool=True, overview:bool=False):
+                      all_random:bool=True, overview:bool=False,
+                      **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
     subdivision (admin1). 
@@ -50,8 +51,11 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         weather pixels are shuffled and randomly selected.
     overview: bool
         If true it will return the overview file string
+    **kwargs: 
+        kwargs to pass to the GSRun.run function
     """
     # Simulation will start 30 days prior (As sugested by Ines et al., 2013)
+    # start_date = plantingdate
     start_date = plantingdate - timedelta(days=30)
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
     con = db.connect(dbname)
@@ -132,17 +136,38 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
 
         dssat_weather.write(tmp_dir.name)
 
+        # Planting assuming emergence 5 days after planting
+        planting = {
+            "PDATE": plantingdate, 
+            # "EDATE": plantingdate + timedelta(days=5),
+            "PLDP": 5
+        }    
         gs.add_treatment(
             soil_profile=soil_profile,
             weather=os.path.join(tmp_dir.name, f"{dssat_weather._name}.WTH"),
             nitrogen=nitrogen,
-            planting=plantingdate,
+            planting=planting,
             cultivar=cultivar
         )
     # Run DSSAT
     con.close()
-    
-    out = gs.run(start_date=start_date)
+    # Set automatic management
+    planting_window_start = plantingdate - timedelta(days=15)
+    planting_window_end = plantingdate + timedelta(days=15)
+    sim_controls = {
+        "PLANT": "F", # Automatic, force in last day of window
+        "PFRST": planting_window_start.strftime("%y%j"),
+        "PLAST": planting_window_end.strftime("%y%j"),
+        "PH2OL": 50, "PH2OU": 100, "PH2OD": 20, 
+        "PSTMX": 40, "PSTMN": 10
+    }
+    # Get run kwargs if defined
+    start_date = kwargs.get("start_date", start_date)
+    sim_controls = kwargs.get("sim_controls", sim_controls)
+    out = gs.run(
+        start_date=start_date,
+        sim_controls=sim_controls
+    )
     tmp_dir.cleanup()
     # print("")
     if overview:
