@@ -17,13 +17,13 @@ from tqdm import tqdm
 
 
 MIN_SAMPLES = 4
-MAX_SIM_LENGTH = 6*30 # This is maximum simulation lenght since planting. 
+MAX_SIM_LENGTH = 10*30 # This is maximum simulation lenght since planting. 
 
 def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
                       all_random:bool=True, overview:bool=False,
-                      **kwargs):
+                      return_input=False, **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
     subdivision (admin1). 
@@ -51,6 +51,10 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         weather pixels are shuffled and randomly selected.
     overview: bool
         If true it will return the overview file string
+    return_input: bool
+        If True it will return a list with the path to the .SOL and .WTH and the
+        model won't run. This is useful for calibration, as the inputs wound be 
+        queried from the db only once.
     **kwargs: 
         kwargs to pass to the GSRun.run function
     """
@@ -84,9 +88,14 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         soil_pixels = weather_pixels = pixels.sample(nens, replace=False)
 
     # tmpdir to save wth files
-    tmp_dir = tempfile.TemporaryDirectory()
+    if return_input:
+        tmp_dir_name = tempfile.mkdtemp()
+        input_files =[]
+    else:
+        tmp_dir = tempfile.TemporaryDirectory()
+        tmp_dir_name = tmp_dir.name
     # Add treatments
-    gs = GSRun()
+    gs = GSRun()        
 
     # Check if TAVG and TAMP are in static table
     tav_exists = db.verify_static_par_exists(dbname, schema, "tav")
@@ -134,21 +143,29 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
             continue
         dssat_weather._name = f"WS{n:02}{dssat_weather._name[4:]}"
 
-        dssat_weather.write(tmp_dir.name)
+        dssat_weather.write(tmp_dir_name)
 
         # Planting assuming emergence 5 days after planting
         planting = {
             "PDATE": plantingdate, 
             # "EDATE": plantingdate + timedelta(days=5),
             "PLDP": 5
-        }    
+        }
+        if return_input:
+            input_files.append((
+                (weather, os.path.join(tmp_dir_name, f"{dssat_weather._name}.WTH")),
+                (soil, soil_profile)
+            ))
+            continue
         gs.add_treatment(
             soil_profile=soil_profile,
-            weather=os.path.join(tmp_dir.name, f"{dssat_weather._name}.WTH"),
+            weather=os.path.join(tmp_dir_name, f"{dssat_weather._name}.WTH"),
             nitrogen=nitrogen,
             planting=planting,
             cultivar=cultivar
         )
+    if return_input:
+        return input_files
     # Run DSSAT
     con.close()
     # Set automatic management
