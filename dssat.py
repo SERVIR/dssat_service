@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 
 MIN_SAMPLES = 4
-MAX_SIM_LENGTH = 10*30 # This is maximum simulation lenght since planting. 
+MAX_SIM_LENGTH = 12*30 # This is maximum simulation lenght since planting. 
 
 def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
@@ -69,7 +69,7 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
        soils = db.get_soils(con, schema, admin1, 2)
        if len(soils) < MIN_SAMPLES:
           soils = db.get_soils(con, schema, admin1, None)
-          assert len(soils) < MIN_SAMPLES, \
+          assert len(soils) > MIN_SAMPLES, \
             f"Region is not large enough to have at least {MIN_SAMPLES} samples"
 
     pixels = soils.apply(lambda row: (row.lon, row.lat), axis=1)
@@ -117,7 +117,7 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
             tav = None
             tamp = None
 
-        if weather_df is None:
+        if (weather_df is None) or (len(weather_df) < 1):
             # In the unlikely case that there is no data for that location.
             # This can occur in soil pixels that are near coasts or very close
             # to the domain's boundary
