@@ -505,5 +505,15 @@ def get_static_par(con, schema:str, lon:float, lat:float, par:str):
 
     return rows[0][0]
     
-    
-
+def check_admin1_in_country(con, schema, admin1):
+    cur = con.cursor()
+    query ="""
+        SELECT admin1 FROM {0}.admin
+        WHERE
+            admin1='{1}';
+    """.format(schema, admin1.replace("'", "''"))
+    cur.execute(query)
+    rows = cur.fetchall()
+    cur.close()
+    assert len(rows) > 0, f"{admin1} not in {schema} schema"
+    assert len(rows) == 1, f"Multiple {admin1} in {schema} schema"
