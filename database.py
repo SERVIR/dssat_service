@@ -449,11 +449,14 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
                    dateto.strftime("%Y-%m-%d"))
         cur.execute(query)
         rows = np.array(cur.fetchall())
+        if len(rows) < 1:
+            warnings.warn(f"{var} data is NULL at location {lon}, {lat}")
+            continue
         df[var] = Series(rows[:, 1], index=rows[:, 0])
     
     cur.close()
     if df.isna().any().any():
-        warnings.warn("Data is NULL at location")
+        warnings.warn(f"Data is NULL at location {lon}, {lat}")
         return
     return df.sort_index()
 
@@ -475,7 +478,8 @@ def get_soils(con, schema:str, admin1:str, mask:int=None):
             ST_Contains(ad.geom, so.geom)
             AND ad.admin1='{1}'
             {2};
-        """.format(schema, admin1, mask_query)
+        """.format(schema, admin1.replace("'", "''"), mask_query)
+        # Single quote is represented as double quotes in the SQL query
     cur.execute(query)
     rows = cur.fetchall()
     df = DataFrame(rows, columns=["lon", "lat", "soil", "mask1", "mask2"])

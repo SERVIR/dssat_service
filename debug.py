@@ -22,9 +22,9 @@ date = datetime(2024, 1, 2)
 
 dbname = "dssatserv"
 
-def add_country():
-    shp = "/home/user/dssat_service/kenya_mngCalibration/data/shapes/ken_admbnda_adm1_iebc_20191031.shp"
-    add_country(dbname, "Kenya", shp, "ADM1_EN")
+# def add_country():
+#     shp = "/home/user/dssat_service/kenya_mngCalibration/data/shapes/ken_admbnda_adm1_iebc_20191031.shp"
+#     add_country(dbname, "Kenya", shp, "ADM1_EN")
 
 
 def ingest_era5_data():
@@ -94,8 +94,41 @@ if __name__ == "__main__":
     # )
     # print(out)
     # ingest_soil_data()
-    run_model()
-    # ingest_static_data()
-    # itime = time.time()
-    # ingest_era5_data()
-    # print(time.time()-itime)
+    # run_model()
+    
+    # Add country
+    # add_country(
+    #     dbname, 
+    #     "Zimbabwe", 
+    #     "/home/user/dssat_service/fewsnet_data/admin_bounds/zimbabwe_fewsnet_admin2.geojson", 
+    #     "name"
+    # )
+    
+    # Ingest soil data
+    ingest_soil(
+        dbname=dbname,
+        schema="zimbabwe",
+        soilfile="/home/user/dssat_service/data/soil_data/iSDASoil/ZW.SOL",
+        mask1="/home/user/dssat_service/data/subsaharanAfrica-maize.tif",
+        mask2="/home/user/dssat_service/data/subsaharanAfrica-suitableAg-v2.tif"
+    )
+    
+    # Ingest static data
+    # static_data = [
+    #     ("tamp", "/home/user/dssat_service/data/weather_data/tav_tamp/tamp_zimbabwe.tif"),
+    #     ("tav", "/home/user/dssat_service/data/weather_data/tav_tamp/tav_zimbabwe.tif")
+    # ]
+    # for parname, rast in static_data:
+    #     ingest_static(
+    #         dbname=dbname,
+    #         schema="zimbabwe",
+    #         rast=rast,
+    #         parname=parname
+    #     )
+    
+    # Ingest era5 data
+    # ingest_era5_series(
+    #     dbname, "zimbabwe", 
+    #     datetime(2010, 2, 1), 
+    #     datetime(2023, 12, 31)
+    # )

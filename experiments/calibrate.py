@@ -13,6 +13,7 @@ Use Africa cultivars.
 import sys 
 sys.path.append("/home/user/dssat_service/regional_service")
 from dssat import run_spatial_dssat
+from database import connect
 from spatialDSSAT.run import GSRun
 from datetime import datetime, timedelta
 import numpy as np
@@ -23,13 +24,23 @@ import os
 os.chdir("/home/user/dssat_service/regional_service/experiments")
 
 DBNAME = "dssatserv"
+con = connect(DBNAME)
+cur = con.cursor()
+cur.execute("SELECT admin1 FROM kenya.admin;")
+rows = cur.fetchall()
+cur.close()
+con.close()
 # Top 15 states make up to nearly 75% of total production
-ADMIN1_LIST = [
+ALREADY_CALIBRATED = [
     'Trans Nzoia', 'Bungoma', 'Uasin Gishu', 'Nandi', 'Kakamega', 'Kisii',
     'Nakuru', 'Siaya', 'Migori', 'Narok', 'Nyamira', 'Meru', 'Kericho','Bomet',
-    'Makueni'
+    'Makueni', 'Baringo', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa', 
+    'Homa Bay', 'Isiolo', 'Kajiado', 'Kiambu', 'Nyeri', 'Kilifi', 'Kirinyaga',
+    'Kisumu', 'Kitui', 'Kwale', 'Laikipia', 'Lamu', 'Machakos', 'Mandera', 
+    'Marsabit', 'Mombasa'
 ]
-
+ADMIN1_LIST = [r[0] for r in rows]
+ADMIN1_LIST = list(filter(lambda x: x not in ALREADY_CALIBRATED, ADMIN1_LIST))
 # with open("cultivars_list.txt", "r") as f:
 #     lines = f.readlines()
 # cultivars = [l[:6] for l in lines[1:]]
@@ -44,6 +55,9 @@ CULTIVARS = [
 obs = pd.read_csv("~/dssat_service/fewsnet_data/kenya_shortRains_maize.csv")
 # obs = obs.loc[obs.season_name == "Long rains harvest"]
 obs = obs.loc[obs.year > 2010]
+obs = obs.loc[~obs.value.isna()]
+ADMIN1_LIST = list(filter(lambda x: x in obs.admin_1.unique(), ADMIN1_LIST)) #Embu was the last one
+
 
 def get_dssat_inputs(admin1, year):
     inputs = run_spatial_dssat(
@@ -138,40 +152,5 @@ if __name__ == "__main__":
             inputs_dict[row.year] = get_dssat_inputs(admin1, row.year)
         for cultivar in CULTIVARS:
             process_cultivar(admin1, cultivar, inputs_dict)
-    # from scipy.optimize import least_squares
-    # from scipy.stats import pearsonr
-    # records = []
-    # admin1 = ADMIN1_LIST[1]
-    # for cultivar in cultivars:
-    #     fcost = lambda x: calculate_mse(admin1, x, cultivar)
-    #     res = least_squares(
-    #         fcost, x0=50, bounds=(0, 200), max_nfev=10, xtol=.05,
-    #         verbose=2,
-    #     )
-    #     nitro = int(res.x)
-    #     for month in range(3, 6):
-    #         sim_yield = []
-    #         for _, row in obs.loc[obs.admin_1 == admin1].iterrows():
-    #             plantingdate = datetime(row.year, month, 1)
-    #             df = run_model(admin1, cultivar, plantingdate, nitro)
-    #             sim_yield.append(df.HARWT.astype(int).median()/1000)
-    #         obs_yield = obs.loc[obs.admin_1 == admin1, "value"].values
-    #         r, p =pearsonr(sim_yield, obs_yield)
-    #         me = (np.array(sim_yield) - obs_yield).mean()
-    #         mae = abs(obs_yield - np.array(sim_yield)).mean()
-    #         rmse = np.sqrt((obs_yield - np.array(sim_yield))**2).mean()
-    #         records.append((
-    #             admin1, cultivar, nitro, month, r, p, me, mae, rmse
-    #         ))
-    # print(records[-1])
-    # YEARS = (2020, )
-    # YEARS = (2018, 2019, 2020, 2021, 2022)
-    # for year in YEARS:
-    #     iterable = product(ADMIN1_LIST[:], cultivars)
-    #     for admin1, cultivar in iterable:
-    #         tmp_df = run_model(
-    #             admin1, cultivar, datetime(year, 4, 1)
-    #         )
-    #         tmp_df.to_csv(f"cultivar_results/{admin1}_{year}_{cultivar}.csv", index=False)
         
             
