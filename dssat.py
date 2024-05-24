@@ -63,6 +63,7 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     start_date = plantingdate - timedelta(days=30)
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
     con = db.connect(dbname)
+    db.check_admin1_in_country(con, schema, admin1)
     # Get soils and verify a minimum number of pixel samples
     soils = db.get_soils(con, schema, admin1, 1)
     if len(soils) < MIN_SAMPLES:
