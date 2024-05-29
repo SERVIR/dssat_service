@@ -176,7 +176,7 @@ def _create_baseline_pars_table(dbname, schema):
             planting_month int,
             nitrogen float,
             crps float8,
-            rpss text
+            rpss float8
         );
         """.format(schema, table)
     cur.execute(query)
@@ -604,3 +604,76 @@ def check_admin1_in_country(con, schema, admin1):
     cur.close()
     assert len(rows) > 0, f"{admin1} not in {schema} schema"
     assert len(rows) == 1, f"Multiple {admin1} in {schema} schema"
+    
+    
+def fetch_admin1_list(con, schema):
+    """
+    Returns a list of admin units that are set to simulate. I.E. they must have
+    a baseline defined in the baseline_pars table. If there is not baseline defined
+    it is because the admin unit is too small to get more than 4 pixels from its
+    bound, or because there was not observed data to generate a baseline.
+    """
+    cur = con.cursor()
+    query = """
+        SELECT ad.admin1 FROM {0}.admin AS ad 
+        INNER JOIN {0}.baseline_pars AS bl
+            ON ad.admin1=bl.admin1;
+        """.format(schema)
+    cur.execute(query)
+    rows = cur.fetchall()
+    return [r[0] for r in rows]
+
+def fetch_baseline_pars(con, schema, admin1):
+    """"""
+    cur = con.cursor()
+    query = """
+        SELECT cultivar, planting_month, nitrogen, crps, rpss 
+        FROM {0}.baseline_pars
+        WHERE
+            admin1='{1}';
+        """.format(schema, admin1.replace("'", "''"))
+    cur.execute(query)
+    rows = cur.fetchall()
+    assert len(rows) > 0, \
+        f"No baseline available for {admin1} in {schema}.baseline_pars"
+    assert len(rows) == 1, \
+        f"More than one baseline defined for {admin1} in {schema}.baseline_pars"
+    pars_dict = {
+        "cultivar": rows[0][0], "planting_month": int(rows[0][1]),
+        "nitrogen": float(rows[0][2]), "crps": float(rows[0][3]),
+        "rpss": float(rows[0][4])
+        }
+    return pars_dict
+
+def fetch_baseline_run(con, schema, admin1):
+    cur = con.cursor()
+    query = """
+        SELECT year, harwt, obs  
+        FROM {0}.baseline_run
+        WHERE
+            admin1='{1}'
+        ;""".format(schema, admin1.replace("'", "''"))
+    cur.execute(query)
+    rows = cur.fetchall()
+    assert len(rows) > 0, \
+        f"No baseline run available for {admin1} in {schema}.baseline_run"
+    return DataFrame(rows, columns=["year", "sim", "obs"])
+
+def fetch_cultivars(con, schema, admin1):
+    cur = con.cursor()
+    query = """
+        SELECT cultivar, yield_category, season_length, yield_range  
+        FROM {0}.cultivars
+        WHERE
+            admin1='{1}'
+        ;""".format(schema, admin1.replace("'", "''"))
+    cur.execute(query)
+    rows = cur.fetchall()
+    assert len(rows) > 0, \
+        f"No baseline run available for {admin1} in {schema}.baseline_run"
+    out_df = DataFrame(
+        rows, 
+        columns=["cultivar", "yield_category", "season_length", "yield_range"]
+    ).set_index("cultivar")
+    return out_df
+    
