@@ -72,7 +72,7 @@ def _create_reanalysis_table(dbname, schema, table):
     con.close()
     return 
 
-def create_static_table(dbname, schema):
+def _create_static_table(dbname, schema):
     """Creates table for static rasters"""
     con = connect(dbname)
     cur = con.cursor()
@@ -132,6 +132,91 @@ def _create_soil_table(dbname, schema):
     cur.close()
     con.close()
     return 
+
+def _create_cultivars_table(dbname, schema):
+    """Creates soil table"""
+    table = "cultivars"
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1} (
+            id serial PRIMARY KEY,
+            admin1 text,
+            cultivar char(6),
+            yield_category text,
+            season_length int,
+            yield_avg float8,
+            yield_range text
+        );
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_admin1 ON {0}.{1} (admin1);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_yieldCat ON {0}.{1} (yield_category);
+        """.format(schema, table)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return
+
+def _create_baseline_pars_table(dbname, schema):
+    """"""
+    table = "baseline_pars"
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1} (
+            id serial PRIMARY KEY,
+            admin1 text,
+            cultivar char(6),
+            planting_month int,
+            nitrogen float,
+            crps float8,
+            rpss text
+        );
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_admin1 ON {0}.{1} (admin1);
+        """.format(schema, table)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return
+
+def _create_baseline_run_table(dbname, schema):
+    """"""
+    table = "baseline_run"
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1} (
+            id serial PRIMARY KEY,
+            admin1 text,
+            harwt float,
+            obs float,
+            year int
+        );
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_admin1 ON {0}.{1} (admin1);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_year ON {0}.{1} (year);
+        """.format(schema, table)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return
+
 
 def schema_exists(dbname, schema):
     """Check if schema exists in database."""
@@ -224,6 +309,8 @@ def add_country(dbname:str, name:str, shapefile:str,
             _create_reanalysis_table(dbname, name, f"era5_{var}")
     if not table_exists(dbname, name, f"soil"):
         _create_soil_table(dbname, name)
+    if not table_exists(dbname, name, f"cultivars"):
+        _create_cultivars_table(dbname, name)
     cur.close()
     con.close()
     return
