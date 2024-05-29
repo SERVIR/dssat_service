@@ -14,6 +14,7 @@ from . import transform
 from tqdm import tqdm
 
 import rasterio as rio
+import pandas as pd
 
 VARIABLES_ERA5_NC = db.VARIABLES_ERA5_NC
 
@@ -136,7 +137,7 @@ def ingest_static(dbname:str, schema:str, rast:str, parname:str):
     """
 
     if not db.table_exists(dbname, schema, "static"):
-        db.create_static_table(dbname, schema)
+        db._create_static_table(dbname, schema)
     assert not db.verify_static_par_exists(dbname, schema, parname), \
         f"{parname} already in static table. Remove it before ingesting it back"
     
@@ -147,4 +148,88 @@ def ingest_static(dbname:str, schema:str, rast:str, parname:str):
         table="static",
         par=parname
     )
+    
+def ingest_cultivars(dbname:str, schema:str, csv:str):
+    """
+    Ingest cultivar data. The data to ingest must be in a csv with the next
+    columns: 
+        admin1
+        yield_category: one among High, Medium, Low
+        season_length: average season lenght
+        cultivar: DSSAT cultivar code
+        yield_avg: average potential yield
+        yield_range: string with yield range for that yield category
+    """
+    con = db.connect(dbname)
+    cur = con.cursor()
+    df = pd.read_csv(csv)
+    for _, row in df.iterrows():
+        query = """
+            INSERT INTO {0}.cultivars(
+                admin1, cultivar, yield_category, season_length, yield_avg,
+                yield_range
+                ) 
+            VALUES ('{1}', '{2}', '{3}', '{4}', '{5}', '{6}');
+            """.format(
+                schema, row.admin1.replace("'", "''"), row.cultivar, 
+                row.yield_category, row.season_length, row.yield_avg, 
+                row.yield_range
+            )
+        cur.execute(query)
+        con.commit()
+        
+def ingest_baseline_pars(dbname:str, schema:str, csv:str):
+    """
+    Ingest baseline parameters. The data to ingest must be in a csv with the next
+    columns: 
+        admin1
+        cultivar: DSSAT cultivar code
+        nitrogen : nitrogen rate used 
+        planting_month : planting month as integer
+        rpss: Ranked probability skill score
+        crps: Continous ranked probability score
+    """
+    if not db.table_exists(dbname, schema, "baseline_pars"):
+        db._create_baseline_pars_table(dbname, schema)
+    con = db.connect(dbname)
+    cur = con.cursor()
+    df = pd.read_csv(csv)
+    for _, row in df.iterrows():
+        query = """
+            INSERT INTO {0}.baseline_pars(
+                admin1, cultivar, nitrogen, planting_month, crps, rpss
+                ) 
+            VALUES ('{1}', '{2}', {3}, {4}, {5}, {6});
+            """.format(
+                schema, row.admin1.replace("'", "''"), row.cultivar, row.nitro, 
+                row.month, row.crps, row.rpss
+            )
+        cur.execute(query)
+        con.commit()
 
+def ingest_baseline_run(dbname:str, schema:str, csv:str):
+    """
+    Ingest baseline run. The data to ingest must be in a csv with the next
+    columns: 
+        admin1
+        harwt: dssat yield (t/ha)
+        obs: observed yield for that year (t/ha)
+        year: year
+    """
+    if not db.table_exists(dbname, schema, "baseline_run"):
+        db._create_baseline_run_table(dbname, schema)
+    con = db.connect(dbname)
+    cur = con.cursor()
+    df = pd.read_csv(csv)
+    for _, row in df.iterrows():
+        query = """
+            INSERT INTO {0}.baseline_run(
+                admin1, harwt, obs, year
+                ) 
+            VALUES ('{1}', '{2}', '{3}', '{4}');
+            """.format(
+                schema, row.admin1.replace("'", "''"), row.harwt, row.obs, 
+                row.year
+            )
+        cur.execute(query)
+        con.commit()

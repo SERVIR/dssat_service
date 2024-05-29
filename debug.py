@@ -1,11 +1,12 @@
 from data.download import download_era5
 from data.ingest import (
     ingest_era5_record, ingest_era5_series, ingest_soil, 
-    ingest_static
+    ingest_static, ingest_cultivars, ingest_baseline_pars,
+    ingest_baseline_run
     )
 from database import (
     add_country, _create_soil_table, verify_series_continuity,
-    get_era5_for_point, get_soils, connect
+    get_era5_for_point, get_soils, connect, _create_cultivars_table
     )
 from data.transform import parse_overview
 from dssat import run_spatial_dssat
@@ -85,6 +86,19 @@ def ingest_static_data():
     )
 
 if __name__ == "__main__":
+    ingest_baseline_run(
+        dbname, "zimbabwe",
+        "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_run.csv"
+    )
+    # ingest_baseline_pars(
+    #     dbname, "zimbabwe",
+    #     "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_pars.csv"
+    # )
+    # _create_cultivars_table(dbname, "zimbabwe")
+    # ingest_cultivars(
+    #     dbname, "zimbabwe",
+    #     "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_cultivars_final.csv"
+    # )
     # out = verify_series_continuity(
     #     connect(dbname=dbname), 
     #     schema="kenya",
@@ -105,13 +119,13 @@ if __name__ == "__main__":
     # )
     
     # Ingest soil data
-    ingest_soil(
-        dbname=dbname,
-        schema="zimbabwe",
-        soilfile="/home/dquintero/dssat_service/data/soil_data/iSDASoil/ZW.SOL",
-        mask1="/home/dquintero/dssat_service/data/subsaharanAfrica-maize.tif",
-        mask2="/home/dquintero/dssat_service/data/subsaharanAfrica-suitableAg-v2.tif"
-    )
+    # ingest_soil(
+    #     dbname=dbname,
+    #     schema="zimbabwe",
+    #     soilfile="/home/dquintero/dssat_service/data/soil_data/iSDASoil/ZW.SOL",
+    #     mask1="/home/dquintero/dssat_service/data/subsaharanAfrica-maize.tif",
+    #     mask2="/home/dquintero/dssat_service/data/subsaharanAfrica-suitableAg-v2.tif"
+    # )
     
     # Ingest static data
     # static_data = [
