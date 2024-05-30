@@ -6,8 +6,12 @@ from data.ingest import (
     )
 from database import (
     add_country, _create_soil_table, verify_series_continuity,
-    get_era5_for_point, get_soils, connect, _create_cultivars_table
+    get_era5_for_point, get_soils, connect, _create_cultivars_table,
+    fetch_admin1_list, fetch_baseline_pars
     )
+from ui.base import (
+    admin_list, AdminBase, Session
+)
 from data.transform import parse_overview
 from dssat import run_spatial_dssat
 from datetime import datetime
@@ -86,19 +90,25 @@ def ingest_static_data():
     )
 
 if __name__ == "__main__":
-    ingest_baseline_run(
-        dbname, "zimbabwe",
-        "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_run.csv"
-    )
+    con = connect(dbname)
+    admin = admin_list(con, "kenya")
+    session = Session(AdminBase(con, "kenya", "Bomet"))
+    session.run_experiment()
+    session.adminBase.get_quantile_anomalies(session.latest_run)
+    # ingest_baseline_run(
+    #     dbname, "zimbabwe",
+    #     "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_run.csv"
+    # )
     # ingest_baseline_pars(
     #     dbname, "zimbabwe",
     #     "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_pars.csv"
     # )
-    # _create_cultivars_table(dbname, "zimbabwe")
-    # ingest_cultivars(
-    #     dbname, "zimbabwe",
-    #     "/home/dquintero/dssat_service/web_service_dev/experiments/parameters/zimbabwe_cultivars_final.csv"
-    # )
+    # for country in ("zimbabwe", "kenya"):
+    #     _create_cultivars_table(dbname, country)
+    #     ingest_cultivars(
+    #         dbname, country,
+    #         f"/home/dquintero/dssat_service/web_service_dev/experiments/parameters/{country}_cultivars_final.csv"
+    #     )
     # out = verify_series_continuity(
     #     connect(dbname=dbname), 
     #     schema="kenya",

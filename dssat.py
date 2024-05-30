@@ -23,7 +23,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
                       all_random:bool=True, overview:bool=False,
-                      return_input=False, **kwargs):
+                      return_input=False, con=False,
+                      **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
     subdivision (admin1). 
@@ -55,6 +56,9 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         If True it will return a list with the path to the .SOL and .WTH and the
         model won't run. This is useful for calibration, as the inputs wound be 
         queried from the db only once.
+    connection: 
+        a psycopg2 connection object. It will be used instead of setting new
+        conection to dbname
     **kwargs: 
         kwargs to pass to the GSRun.run function
     """
@@ -62,7 +66,10 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     # start_date = plantingdate
     start_date = plantingdate - timedelta(days=30)
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
-    con = db.connect(dbname)
+    close_connection = False
+    if not con:
+        con = db.connect(dbname)
+        close_connection = True
     db.check_admin1_in_country(con, schema, admin1)
     # Get soils and verify a minimum number of pixel samples
     soils = db.get_soils(con, schema, admin1, 1)
@@ -99,8 +106,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     gs = GSRun()        
 
     # Check if TAVG and TAMP are in static table
-    tav_exists = db.verify_static_par_exists(dbname, schema, "tav")
-    tamp_exists = db.verify_static_par_exists(dbname, schema, "tamp")
+    tav_exists = db.verify_static_par_exists(dbname, schema, "tav", con)
+    tamp_exists = db.verify_static_par_exists(dbname, schema, "tamp", con)
     
     for (n, (soil, weather)) in tqdm(list(enumerate(zip(soil_pixels, weather_pixels)))):
         soil_profile = soils.loc[
@@ -168,7 +175,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     if return_input:
         return input_files
     # Run DSSAT
-    con.close()
+    if close_connection:
+        con.close()
     # Set automatic management
     planting_window_start = plantingdate - timedelta(days=15)
     planting_window_end = plantingdate + timedelta(days=15)

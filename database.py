@@ -233,9 +233,12 @@ def schema_exists(dbname, schema):
     con.close()
     return schema_exists 
 
-def table_exists(dbname, schema, table):
+def table_exists(dbname, schema, table, con=False):
     """Check if table exists in the database."""
-    con = connect(dbname)
+    close_connection = False
+    if not con:
+        con = connect(dbname)
+        close_connection = True
     cur = con.cursor()
     query = """
         SELECT * FROM information_schema.tables 
@@ -245,7 +248,8 @@ def table_exists(dbname, schema, table):
     cur.execute(query)
     table_exists = bool(cur.rowcount)
     cur.close()
-    con.close()
+    if close_connection:
+        con.close()
     return table_exists
 
 def add_country(dbname:str, name:str, shapefile:str, 
@@ -460,11 +464,14 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
         con.close()
     return
 
-def verify_static_par_exists(dbname:str, schema:str, parname:str):
+def verify_static_par_exists(dbname:str, schema:str, parname:str, con=False):
     """It will raise an error if the static parameter already exists"""
-    if not table_exists(dbname, schema, "static"):
+    close_connection = False
+    if not con:
+        con = connect(dbname)
+        close_connection = True
+    if not table_exists(dbname, schema, "static", con):
         return False
-    con = connect(dbname)
     cur = con.cursor()
     query = """
         SELECT 1 FROM {0}.static WHERE par = '{1}';
@@ -472,7 +479,8 @@ def verify_static_par_exists(dbname:str, schema:str, parname:str):
     cur.execute(query)
     rows = cur.fetchall()
     cur.close()
-    con.close()
+    if close_connection:
+        con.close()
     return len(rows) > 0
         
 
@@ -589,7 +597,6 @@ def get_static_par(con, schema:str, lon:float, lat:float, par:str):
     cur.execute(query)
     rows = np.array(cur.fetchall())
     cur.close()
-
     return rows[0][0]
     
 def check_admin1_in_country(con, schema, admin1):
