@@ -669,7 +669,7 @@ def fetch_baseline_run(con, schema, admin1):
 def fetch_cultivars(con, schema, admin1):
     cur = con.cursor()
     query = """
-        SELECT cultivar, yield_category, season_length, yield_range  
+        SELECT cultivar, yield_category, season_length, yield_range, yield_avg 
         FROM {0}.cultivars
         WHERE
             admin1='{1}'
@@ -680,7 +680,8 @@ def fetch_cultivars(con, schema, admin1):
         f"No baseline run available for {admin1} in {schema}.baseline_run"
     out_df = DataFrame(
         rows, 
-        columns=["cultivar", "yield_category", "season_length", "yield_range"]
-    ).set_index("cultivar")
+        columns=["cultivar", "yield_category", "season_length", "yield_range",
+                 "yield_avg"]
+    )
     return out_df
     
