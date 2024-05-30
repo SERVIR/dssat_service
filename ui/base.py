@@ -22,6 +22,13 @@ def admin_list(con, schema):
     """
     return list(sorted(db.fetch_admin1_list(con, schema)))
 
+@dataclass
+class SimulationPars:
+    nitrogen_dap: list
+    nitrogen_rate: list
+    cultivar: str
+    planting_date: datetime
+
 class AdminBase:
     """
     This class handles the admin unit and its parameters. Those parameters include:
@@ -36,7 +43,13 @@ class AdminBase:
         self.connection = con
         self.admin1 = admin1 
         self.schema = schema
-        self.baseline_pars = db.fetch_baseline_pars(con, schema, admin1)
+        pars = db.fetch_baseline_pars(con, schema, admin1)
+        self.baseline_pars = SimulationPars(
+            nitrogen_dap = (5, 30, 60),
+            nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
+            cultivar = pars["cultivar"],
+            planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
+        )
         baseline_data = db.fetch_baseline_run(con, schema, admin1)
         self.baseline_run = baseline_data.loc[
             baseline_data.year.isin(BASELINE_YEARS)
@@ -44,19 +57,32 @@ class AdminBase:
 
         self.baseline_stats = self.baseline_quantile_stats()
         self.validation_run =  baseline_data.dropna()
-        self.cultivars = db.fetch_cultivars(con, schema, admin1)
+        tmp_df = db.fetch_cultivars(con, schema, admin1)
+        tmp_df["yield_avg"] = (tmp_df.yield_avg/1000).round(1)
+        tmp_df = tmp_df.set_index(["yield_avg", "season_length"])
+        self.cultivars = tmp_df.sort_index()
+        
+        self.cultivar_labels = dict(zip(
+            self.cultivars.cultivar,
+            self.cultivars.index.map(
+                lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
+            ),
+        ))
+        self.cultivar_labels_inv = {v: k for k, v in self.cultivar_labels.items()}
         
         
     def baseline_description(self):
         """
         Returns a string that describes the current baseline scenario.
         """
-        cultivar, month, nitro, crps, rpss =self.baseline_pars.values()
-        cultivar =self.cultivars.loc[cultivar]
-        desc = f"Baseline was estimated assuming a {cultivar.season_length} " + \
+        cultivar = self.baseline_pars.cultivar
+        plantingdate = self.baseline_pars.planting_date
+        nitro = sum(self.baseline_pars.nitrogen_rate)
+        cultivar = self.cultivars.loc[self.cultivars.cultivar == cultivar].iloc[0]
+        desc = f"Baseline was estimated assuming a {cultivar.name[1]} " + \
             f"days {cultivar.yield_category} " + \
-            f"yield potential cultivar ({cultivar.yield_range} t/ha) " + \
-            f"planted on {datetime(2000, month, 1).strftime('%B')} " + \
+            f"yield potential cultivar ({cultivar.name[0]} t/ha) " + \
+            f"planted on {plantingdate.strftime('%B')} " + \
             f"and fertilized with {nitro:.0f} kg of Nitrogen"
         return desc
     
@@ -91,13 +117,6 @@ class AdminBase:
             self. baseline_stats["std"]
         return anomalies
 
-@dataclass
-class SimulationPars:
-    nitrogen_dap: list
-    nitrogen_rate: list
-    cultivar: str
-    planting_date: datetime
-
 class Session:
     """
     This class represents the simulation sesion. Each simulation sesion has to
@@ -113,14 +132,7 @@ class Session:
         baseline
         """
         self.adminBase = adminBase
-        self.simPars = SimulationPars(
-            nitrogen_dap = (5, 30, 50),
-            nitrogen_rate = [self.adminBase.baseline_pars["nitrogen"]/3]*3,
-            planting_date = datetime(
-                2022, self.adminBase.baseline_pars["planting_month"], 1
-            ),
-            cultivar = self.adminBase.baseline_pars["cultivar"]
-        )
+        self.simPars = self.adminBase.baseline_pars
         self.experiment_results = pd.DataFrame(
             [], 
             columns=[
@@ -152,16 +164,23 @@ class Session:
         )
         
     
-    def run_experiment(self):
+    def run_experiment(self, baseline_run=False, **kwargs):
         """
         Runs the model using the last parameters defined.
         """
         nitro = list(zip(self.simPars.nitrogen_dap, self.simPars.nitrogen_rate))
-        plantingdate = datetime(
-            self.simPars.planting_date.year, 
-            self.simPars.planting_date.month, 
-            self.simPars.planting_date.day
-        )
+        if baseline_run:
+            plantingdate = datetime(
+                kwargs.get("year", None), 
+                self.simPars.planting_date.month, 
+                self.simPars.planting_date.day
+            )
+        else:
+            plantingdate = datetime(
+                self.simPars.planting_date.year, 
+                self.simPars.planting_date.month, 
+                self.simPars.planting_date.day
+            )
         planting_window_start = plantingdate - timedelta(days=5)
         planting_window_end = plantingdate + timedelta(days=5)
         sim_controls = {
@@ -181,29 +200,29 @@ class Session:
             all_random=True,
             sim_controls=sim_controls
         )
-        self.latest_run = df
-        self.latest_overview = overview
-        self.add_experiment_results()
+        if baseline_run:
+            return df
+        else:
+            self.latest_run = df
+            self.latest_overview = overview
+            self.add_experiment_results()
+        
     
-    # def run_baseline(pars):
-    #     df = pd.DataFrame()
-    # if "nitrogen_dap" in pars.__dict__:
-    #     nitro = list(zip(pars.nitrogen_dap, pars.nitrogen_rate))
-    # else:
-    #     nitro = [(0, pars.nitrogen),]
-    # for year in BASELINE_YEARS:
-    #     tmp_df = run_spatial_dssat(
-    #         dbname=DBNAME, 
-    #         schema=pars.adminBase.schema, 
-    #         admin1=pars.adminBase.admin1,
-    #         plantingdate=datetime(pars.planting_date.year, pars.planting_date.month, pars.planting_date.day),
-    #         cultivar=pars.cultivar,
-    #         nitrogen=nitro,
-    #         overview=False,
-    #         all_random=True
-    #     )
-    #     tmp_df["year"] = year 
-    #     df = pd.concat([df, tmp_df], ignore_index=True)
-    # return df
+    def new_baseline(self):
+        """
+        Run the model to get a new baseline given the current parameters
+        """
+        df_list = []
+        for year in BASELINE_YEARS:
+            tmp_df = self.run_experiment(baseline_run=True, year=year)
+            tmp_df["year"] = year
+            df_list.append(tmp_df)
+        df = pd.concat(df_list, ignore_index=True)
+        df = df[["year", "HARWT"]].rename(columns={"HARWT": "sim"})
+        df["sim"] = df.sim.astype(float)/1000
+        df["obs"] = np.nan
+        self.baseline_pars = self.simPars
+        self.adminBase.baseline_run = df
+        self.adminBase.baseline_stats = self.adminBase.baseline_quantile_stats()
         
          

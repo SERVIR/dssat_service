@@ -11,7 +11,7 @@ from highcharts_core.options.plot_options.scatter import ScatterOptions
 from highcharts_core.options.series.bar import ColumnSeries
 from highcharts_core.options.plot_options.bar import ColumnOptions
 
-from .base import AdminBase, Q_RANGE
+from .base import AdminBase, Q_RANGE, Session
 from data.transform import parse_overview
 
 import numpy as np
@@ -40,7 +40,8 @@ def columnRange_data(df):
         data.append((year, sim_data.loc[year, Q_RANGE[0]], sim_data.loc[year, Q_RANGE[1]]))
     return data
 
-def validation_chart(adminBase:AdminBase):
+def validation_chart(session:Session):
+    adminBase=session.adminBase
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
     my_chart.options.title = {
@@ -75,7 +76,9 @@ def validation_chart(adminBase:AdminBase):
             }
         }
     }
-    
+    my_chart.options.tooltip = {
+        "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
+    }
     tmp_df = adminBase.validation_run
     # Column bar series
     data = columnRange_data(tmp_df)
@@ -100,7 +103,7 @@ def init_anomalies_chart():
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
     my_chart.options.title = {
-        'text': 'DSSAT maize yield anomaly probability', 
+        'text': 'DSSAT simulated maize yield anomaly probability', 
         "style": {
             "font-size": "15px"
         }
@@ -170,7 +173,7 @@ def add_anomaly_bar(chart, session):
     """
     data = session.adminBase.get_quantile_anomalies(session.latest_run)
     cat_data = assign_categories(data)
-    label = f"{session.simPars.cultivar}<br>" + \
+    label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
         f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
         f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
     x = label
@@ -257,3 +260,66 @@ def add_stress_bar(chart, session):
     
 def clear_stress_chart(chart):
     chart.options.series = None
+    
+def init_columnRange_chart():
+    my_chart = Chart()
+    my_chart.options = HighchartsOptions()
+    my_chart.options.title = {
+        'text': 'DSSAT simulated maize yield', 
+        "style": {
+            "font-size": "15px"
+        }
+    }
+    my_chart.options.y_axis = {
+        "title": {
+            'text': 'Yield (kg/ha)',
+            "style": {
+                "font-size": "15px"
+            }
+        },
+        "labels": {
+            "style": {
+                "font-size": "15px",
+            }
+        },
+    }
+    my_chart.options.x_axis = {
+        "title": {
+            'text': 'Experiment', 
+            "style": {
+                "font-size": "15px",
+            }
+        },
+        "labels": {
+            "style": {
+                "font-size": "15px",
+            }
+        }
+    }
+    my_chart.options.tooltip = {
+        "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
+#         "point_format": '<span style="font-size: 10px">{series.name}</span><br/>'
+    }
+    my_chart.add_series(
+        ColumnRangeSeries(name="Simulated yield (90% CI)", color="#00cc66")
+    )
+    return my_chart
+
+def add_yield_column(chart, session):
+    tmp_df = session.latest_run
+    tmp_df['year'] = 1
+    tmp_df["sim"] = tmp_df.HARWT.astype(float)/1000
+    data = dict(zip(("low", "high"), columnRange_data(tmp_df)[0][1:]))
+
+    label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
+            f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
+            f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
+
+    data["name"] = label
+    data["x"] = label
+
+    series = chart.options.series[0]
+    if series.data is None:
+        series.data = [data]
+    else:
+        series.data += [data]
