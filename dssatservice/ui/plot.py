@@ -11,10 +11,16 @@ from highcharts_core.options.plot_options.scatter import ScatterOptions
 from highcharts_core.options.series.bar import ColumnSeries
 from highcharts_core.options.plot_options.bar import ColumnOptions
 
-from .base import AdminBase, Q_RANGE, Session
+from .base import AdminBase, Session
 from data.transform import parse_overview
 
 import numpy as np
+
+SERIES_CI = [99, 90, 75, 50]
+COLORS = ["#99ff99", "#66ff66", "#33cc33", "#009933"]
+Q_RANGE_PLOTS = (
+    (0.005, 0.995), (0.05, 0.95), (0.125, 0.875), (0.25, 0.75),
+)
 
 DEV_STAGES = [
     'Emergence-End Juvenile', 'End Juvenil-Floral Init',
@@ -32,12 +38,14 @@ STRESS_COLUMNS = {
 CAT_NAMES = ["Very low", "Low", "Normal", "High", "Very high"]
 CAT_COLORS = ['#cc0000', "#ff9933", "#ffff66", "#99cc00", "#009933"]
 
-def columnRange_data(df):
-    sim_data = df.groupby("year").sim.quantile(Q_RANGE)
+def columnRange_data(df, qrange=(.05, .95)):
+    sim_data = df.groupby("year").sim.quantile(qrange)
     sim_data = sim_data.sort_index().round(2)
     data = []
     for year in sim_data.index.get_level_values(0).unique():
-        data.append((year, sim_data.loc[year, Q_RANGE[0]], sim_data.loc[year, Q_RANGE[1]]))
+        data.append(
+            (year, sim_data.loc[year, qrange[0]], sim_data.loc[year, qrange[1]])
+        )
     return data
 
 def validation_chart(session:Session):
@@ -80,17 +88,19 @@ def validation_chart(session:Session):
         "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
     }
     tmp_df = adminBase.validation_run
-    # Column bar series
-    data = columnRange_data(tmp_df)
-    column = ColumnRangeSeries().from_array(data)
-    column.name = "Simulated (90% CI)"
-    column.color = "#00cc66"
-    my_chart.add_series(column)
+    for n, qrange in enumerate(Q_RANGE_PLOTS):
+        data = columnRange_data(tmp_df, qrange)
+        column = ColumnRangeSeries().from_array(data)
+        column.name = f"Simulated yield ({SERIES_CI[n]}% CI)"
+        column.color = COLORS[n]
+        column.grouping = False
+        column.border_width = 0.
+        my_chart.add_series(column)
     # Observed scatterplot
     data = tmp_df.groupby("year").obs.mean().round(3).reset_index().to_numpy()
     scatter = ScatterSeries().from_array(data)
     scatter.name = "Observed"
-    scatter.color = "#003300"
+    scatter.color = "#ff3300"
     scatter.marker = {"symbol": "square", "radius": 6}
 
     my_chart.add_series(scatter)
@@ -300,16 +310,20 @@ def init_columnRange_chart():
         "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
 #         "point_format": '<span style="font-size: 10px">{series.name}</span><br/>'
     }
-    my_chart.add_series(
-        ColumnRangeSeries(name="Simulated yield (90% CI)", color="#00cc66")
-    )
+    for n, _ in enumerate(Q_RANGE_PLOTS):
+        my_chart.add_series(
+            ColumnRangeSeries(
+                name=f"Simulated yield ({SERIES_CI[n]}% CI)", 
+                color=COLORS[n], grouping=False, border_width=0.
+            )
+        )
     return my_chart
 
-def add_yield_column(chart, session):
+def add_yield_column(chart, session, series_idx=0, qrange=(.05, .95)):
     tmp_df = session.latest_run
     tmp_df['year'] = 1
     tmp_df["sim"] = tmp_df.HARWT.astype(float)/1000
-    data = dict(zip(("low", "high"), columnRange_data(tmp_df)[0][1:]))
+    data = dict(zip(("low", "high"), columnRange_data(tmp_df, qrange)[0][1:]))
 
     label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
             f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
@@ -318,8 +332,12 @@ def add_yield_column(chart, session):
     data["name"] = label
     data["x"] = label
 
-    series = chart.options.series[0]
+    series = chart.options.series[series_idx]
     if series.data is None:
         series.data = [data]
     else:
         series.data += [data]
+
+def add_yield_ci_columns(chart, session):
+    for n, qrange in enumerate(Q_RANGE_PLOTS):
+        add_yield_column(chart, session, n, qrange)
