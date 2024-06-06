@@ -12,7 +12,7 @@ import pandas as  pd
 from dataclasses import dataclass
 
 BASELINE_YEARS = (2017, 2018, 2019, 2020, 2021)
-Q_RANGE = (.05, .95)
+
 QUANTILES_TO_COMPARE = np.arange(0.025, 1, 0.05)
 SCHEMAS = ("kenya", "zimbabwe")
 
