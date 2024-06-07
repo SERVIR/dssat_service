@@ -10,14 +10,18 @@ from highcharts_core.options.series.scatter import ScatterSeries
 from highcharts_core.options.plot_options.scatter import ScatterOptions
 from highcharts_core.options.series.bar import ColumnSeries
 from highcharts_core.options.plot_options.bar import ColumnOptions
+from highcharts_core.options.legend import Legend
 
 from .base import AdminBase, Session
 from data.transform import parse_overview
 
 import numpy as np
 
-SERIES_CI = [99, 90, 75, 50]
-COLORS = ["#99ff99", "#66ff66", "#33cc33", "#009933"]
+SERIES_CI = [95, 75, 50, 25]
+Q_RANGE_PLOTS = [(.5-q/200, .5+q/200) for q in SERIES_CI]
+# COLORS = ["#99ff99", "#66ff66", "#33cc33", "#009933"]
+COLORS = ["#66ff66", "#33cc33", "#009933", "#006600"]
+
 Q_RANGE_PLOTS = (
     (0.005, 0.995), (0.05, 0.95), (0.125, 0.875), (0.25, 0.75),
 )
@@ -85,8 +89,13 @@ def validation_chart(session:Session):
         }
     }
     my_chart.options.tooltip = {
-        "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+            '<span style="font-size: 12px">{series.name}</span><br/>'
     }
+    my_chart.options.legend = Legend(
+        label_format='<span style="font-size: 12px">{name}</span><br/>'
+    )
     tmp_df = adminBase.validation_run
     for n, qrange in enumerate(Q_RANGE_PLOTS):
         data = columnRange_data(tmp_df, qrange)
@@ -156,9 +165,13 @@ def init_anomalies_chart():
                 "enabled": True
             }
     my_chart.options.tooltip = {
-        "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
-#         "point_format": '<span style="font-size: 10px">{series.name}</span><br/>'
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+            '<span style="font-size: 12px">{series.name}</span><br/>'
     }
+    my_chart.options.legend = Legend(
+        label_format='<span style="font-size: 12px">{name}</span><br/>'
+    )
     return my_chart
 
 # Limit for what is considered "Normal". 0.44 Splits equal groups (terciles)
@@ -307,9 +320,13 @@ def init_columnRange_chart():
         }
     }
     my_chart.options.tooltip = {
-        "header_format": '<span style="font-size: 10px">{point.key}</span><br/>',
-#         "point_format": '<span style="font-size: 10px">{series.name}</span><br/>'
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+            '<span style="font-size: 12px">{series.name}</span><br/>'
     }
+    my_chart.options.legend = Legend(
+        label_format='<span style="font-size: 12px">{name}</span><br/>'
+    )
     for n, _ in enumerate(Q_RANGE_PLOTS):
         my_chart.add_series(
             ColumnRangeSeries(
