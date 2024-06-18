@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 import os 
 
 import sys
-sys.path.append("..")
-import database as db
+# sys.path.append("..")
+import dssatservice.database as db
 
 from . import download
 from . import transform
@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 import rasterio as rio
 import pandas as pd
+import logging
 
 VARIABLES_ERA5_NC = db.VARIABLES_ERA5_NC
 
@@ -33,16 +34,30 @@ def ingest_era5_record(dbname:str, schema:str, date:datetime):
 
     # Get the envelope for that region
     bbox = db.get_envelope(dbname, schema)
-
-    for var, ncvar in VARIABLES_ERA5_NC.items():
-        nc_path = download.download_era5(date, var, bbox)
-        tiff_path = transform.nc_to_tiff(ncvar, date, nc_path)
-        table = f"era5_{var}"
-        # Delete rasters if exists
-        db.delete_rasters(dbname, schema, table, date)
-        db.tiff_to_db(tiff_path, dbname, schema, table, date)
-        os.remove(nc_path)
-        os.remove(tiff_path)
+    logger = logging.getLogger("cdsapi")
+    date = datetime(date.year, date.month, date.day)
+    for var, ncvar in VARIABLES_ERA5_NC.items():      
+        try:
+            nc_path = download.download_era5(date, var, bbox)
+            tiff_path = transform.nc_to_tiff(ncvar, date, nc_path)
+            table = f"era5_{var}"
+            # Delete rasters if exists
+            db.delete_rasters(dbname, schema, table, date)
+            db.tiff_to_db(tiff_path, dbname, schema, table, date)
+            os.remove(nc_path)
+            os.remove(tiff_path)
+            logger.info(
+                f"\nERA5 INGEST: {date.date()} {ncvar} for {schema} ingested\n"
+            )
+        except Exception as e:
+            if "There is no data matching your request." in str(e):
+                logger.info(
+                    f"\nERA5 INGEST: {date.date()} {ncvar} for {schema} failed. " +\
+                    "There is no data matching the request.\n"
+                )
+            else:
+                raise
+        
 
 def ingest_era5_series(dbname:str, schema:str, datefrom:datetime, dateto:datetime):
     """

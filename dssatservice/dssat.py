@@ -3,7 +3,7 @@ This module contains
 """
 from spatialDSSAT.run import GSRun
 from DSSATTools import Weather
-import database as db
+import dssatservice.database as db
 
 import numpy as np
 import pandas as pd

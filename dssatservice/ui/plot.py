@@ -12,10 +12,11 @@ from highcharts_core.options.series.bar import ColumnSeries
 from highcharts_core.options.plot_options.bar import ColumnOptions
 from highcharts_core.options.legend import Legend
 
-from .base import AdminBase, Session
-from data.transform import parse_overview
+from .base import AdminBase, Session, QUANTILES_TO_COMPARE
+from dssatservice.data.transform import parse_overview
 
 import numpy as np
+from scipy import stats
 
 SERIES_CI = [95, 75, 50, 25]
 Q_RANGE_PLOTS = [(.5-q/200, .5+q/200) for q in SERIES_CI]
@@ -41,6 +42,7 @@ STRESS_COLUMNS = {
 }
 CAT_NAMES = ["Very low", "Low", "Normal", "High", "Very high"]
 CAT_COLORS = ['#cc0000', "#ff9933", "#ffff66", "#99cc00", "#009933"]
+ADMIN_NAMES = {"kenya": "County", "zimbabwe": "District"}
 
 def columnRange_data(df, qrange=(.05, .95)):
     sim_data = df.groupby("year").sim.quantile(qrange)
@@ -91,7 +93,7 @@ def validation_chart(session:Session):
     my_chart.options.tooltip = {
         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-            '<span style="font-size: 12px">{series.name}</span><br/>'
+            '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
     }
     my_chart.options.legend = Legend(
         label_format='<span style="font-size: 12px">{name}</span><br/>'
@@ -111,7 +113,11 @@ def validation_chart(session:Session):
     scatter.name = "Observed"
     scatter.color = "#ff3300"
     scatter.marker = {"symbol": "square", "radius": 6}
-
+    scatter.tooltip = {
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+            '<span style="font-size: 12px">{series.name}: {point.y} kg/ha</span><br/>'
+    }
     my_chart.add_series(scatter)
     return my_chart
 
@@ -190,11 +196,32 @@ def assign_categories(data):
     norm = 100 - low - high - very_high - very_low
     return list(map(int, [very_high, high, norm, low, very_low]))
 
-def add_anomaly_bar(chart, session):
+def add_anomaly_bar(chart, session, model_based=True):
     """
     Add an anomaly bar to one existing anomaly chart
     """
-    data = session.adminBase.get_quantile_anomalies(session.latest_run)
+    # This is for anomaly based in model
+    if model_based:
+        data = session.adminBase.get_quantile_anomalies(session.latest_run)
+    # This is for anomaly based in observation
+    else:
+        yld = session.latest_run.HARWT.astype(float)/1000
+        # mu based on observations
+        mu = session.adminBase.validation_run.groupby("year").obs.mean().mean()
+        mu_log = np.log(mu) - .5*std_intra**2
+        # std_intra represents the intra-region variability, which is not know from
+        # observations, then it is assumed from simulations
+        std_intra = session.adminBase.validation_run.sim.std()
+        std_intra_log = np.sqrt(np.log((std_intra**2 + mu**2)/mu**2))
+        # std is the season-to-season variability, known from observations
+        std = session.adminBase.validation_run.groupby("year").obs.mean().std()
+        # observed intra-region quantiles are estimated
+        mu_list = np.array([
+            stats.lognorm(std_intra_log, scale=np.exp(mu_log)).isf(1-q) 
+            for q in QUANTILES_TO_COMPARE
+        ])
+        data = (yld.quantile(QUANTILES_TO_COMPARE) - mu_list)/std
+    
     cat_data = assign_categories(data)
     label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
         f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
@@ -256,7 +283,12 @@ def init_stress_chart(stress_type):
             "allow_overlap": True
         },
         "categories": DEV_STAGES_LABELS
-    }      
+    }    
+    my_chart.options.tooltip = {
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+            '<span style="font-size: 12px">{series.name}: {point.y:.1f} %</span><br/>'
+    }  
     return my_chart
 
 def process_overview(overview):
@@ -284,7 +316,10 @@ def add_stress_bar(chart, session):
 def clear_stress_chart(chart):
     chart.options.series = None
     
-def init_columnRange_chart():
+def init_columnRange_chart(session):
+    """
+    Session is needed to get the average yield from adminBase
+    """
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
     my_chart.options.title = {
@@ -295,9 +330,9 @@ def init_columnRange_chart():
     }
     my_chart.options.y_axis = {
         "title": {
-            'text': 'Yield (kg/ha)',
+            'text': 'Experiment', 
             "style": {
-                "font-size": "15px"
+                "font-size": "15px",
             }
         },
         "labels": {
@@ -305,6 +340,18 @@ def init_columnRange_chart():
                 "font-size": "15px",
             }
         },
+        "plot_lines": [{
+            "value": session.adminBase.validation_run.obs.mean(),
+            "color": "#FF0000",
+            "width": 3,
+            "dash_style": "Dash",
+            "z_index": 99,
+            "label": {
+                "text": f"{ADMIN_NAMES[session.adminBase.schema]}<br/>average",
+                "align": "left",
+                "style": {"color": "black", "font-size": 13}
+            }
+        }]
     }
     my_chart.options.x_axis = {
         "title": {
@@ -322,7 +369,7 @@ def init_columnRange_chart():
     my_chart.options.tooltip = {
         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-            '<span style="font-size: 12px">{series.name}</span><br/>'
+            '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
     }
     my_chart.options.legend = Legend(
         label_format='<span style="font-size: 12px">{name}</span><br/>'

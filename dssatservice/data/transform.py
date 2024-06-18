@@ -82,7 +82,7 @@ def nc_to_tiff(variable:str, date:datetime, ncpath:str, tiffpath:str=None, **kwa
     timevar = kwargs.get("time", "time")
     latvar = kwargs.get("lat", "lat")
     lonvar = kwargs.get("lon", "lon")
-
+    date = datetime(date.year, date.month, date.day)
     nc = Dataset(ncpath)
     
     time = nc.variables[timevar]
