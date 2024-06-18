@@ -4,16 +4,29 @@ in the user interface.
 """
 import sys
 sys.path.append("..")
-import database as db
-from dssat import run_spatial_dssat
+import dssatservice.database as db
+from dssatservice.dssat import run_spatial_dssat
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as  pd
 from dataclasses import dataclass
 
+CULTIVAR_NAMES = {
+    'KY0018': 'KATUMANICOMP-II', 'KY0016': 'HAC ', 'KY0014': 'KATUMANICOMPI',
+    'KY0011': 'H614', 'KY0010': 'H512', 'KY0009': 'CUZCO', 'KY0007': 'PWANI',
+    'KY0006': 'KCB', 'KY0004': 'MAKUCOMP', 'IM0002': 'NIELENI', 'IF0022': 'IKENNE',
+    'IF0021': 'TZEEY-SRBC5', 'IF0019': 'TZESRW X GUA 314', 'IF0018': 'TZE C0MP4C2',
+    'IF0011': 'EV-8443_TG', 'IF0010': 'EV-8449_TG', 'IF0009': 'OBA S2 Benin',
+    'IF0008': 'AG-KADUNA', 'IF0007': 'EV 8449-SRx', 'IF0002': 'EV8728-SR', 
+    'IF0001': 'OBA SUPER 2', 'GH0010': 'OBATANPA', 'ZM0003': 'ZM521', 
+    'ZM0002': 'SC403', 'ZM0001': 'SC513', 'KY0017': 'H612', 'KY0015': 'PH 1',
+    'KY0013': 'H626', 'KY0012': 'H5012', 'KY0005': 'H625', 'KY0003': 'CCOMP',
+    'KY0002': 'H511', 'KA0001': 'H625', 'EM0001': 'H512', "IM0001": "SOTUBAKA"
+}
+
 BASELINE_YEARS = (2017, 2018, 2019, 2020, 2021)
 
-QUANTILES_TO_COMPARE = np.arange(0.025, 1, 0.05)
+QUANTILES_TO_COMPARE = np.arange(0.005, 1, 0.01)
 SCHEMAS = ("kenya", "zimbabwe")
 
 def admin_list(con, schema):
@@ -65,7 +78,9 @@ class AdminBase:
         self.cultivar_labels = dict(zip(
             self.cultivars.cultivar,
             self.cultivars.index.map(
-                lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
+                # lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
+                lambda x: f"{CULTIVAR_NAMES[self.cultivars.loc[x, 'cultivar']]} ({x[1]} days)"
+                
             ),
         ))
         self.cultivar_labels_inv = {v: k for k, v in self.cultivar_labels.items()}
@@ -166,7 +181,7 @@ class Session:
     
     def run_experiment(self, baseline_run=False, **kwargs):
         """
-        Runs the model using the last parameters defined.
+        Runs the model using the lastest parameters defined.
         """
         nitro = list(zip(self.simPars.nitrogen_dap, self.simPars.nitrogen_rate))
         if baseline_run:
