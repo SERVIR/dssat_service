@@ -72,6 +72,40 @@ def _create_reanalysis_table(dbname, schema, table):
     con.close()
     return 
 
+def _create_climate_forecast_table(dbname, schema, table):
+    """Creates a climate forecast table"""
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1} (
+            rast raster NOT NULL, 
+            fdate date NOT NULL,
+            rid serial NOT NULL,
+            ens integer NOT NULL
+        );
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_time ON {0}.{1} (fdate);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_rid ON {0}.{1} (rid);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_ens ON {0}.{1} (ens);
+        """.format(schema, table)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_spatial ON {0}.{1} USING GIST (ST_Envelope(rast));
+        """.format(schema, table)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+    return 
+
 def _create_static_table(dbname, schema):
     """Creates table for static rasters"""
     con = connect(dbname)
@@ -217,6 +251,35 @@ def _create_baseline_run_table(dbname, schema):
     con.close()
     return
 
+def _create_climatology_table(dbname, schema):
+    ds = "era5"
+    con = connect(dbname)
+    cur = con.cursor()
+    query = """
+        CREATE TABLE {0}.{1}_clim (
+            rast raster NOT NULL, 
+            rid serial NOT NULL,
+            variable character(32),
+            month integer
+        );
+        """.format(schema, ds)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_clim_var ON {0}.{1}_clim (variable);
+        """.format(schema, ds)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_clim_rid ON {0}.{1}_clim (rid);
+        """.format(schema, ds)
+    cur.execute(query)
+    query = """
+        CREATE INDEX {1}_clim_month ON {0}.{1}_clim (month);
+        """.format(schema, ds)
+    cur.execute(query)
+    con.commit()
+    cur.close()
+    con.close()
+
 
 def schema_exists(dbname, schema):
     """Check if schema exists in database."""
@@ -339,26 +402,28 @@ def get_envelope(dbname:str, schema:str, pad=0.1):
     bbox = [bbox[0]+pad, bbox[1]-pad, bbox[2]-pad, bbox[3]+pad]
     return bbox
 
-def delete_rasters(dbname, schema, table, date):
+def delete_rasters(dbname, schema, table, date=None, where=None):
     """If date already exists delete associated rasters before ingesting."""
     con = connect(dbname)
     cur = con.cursor()
+    if (where is None):
+        where = "fdate='{2}'".format( date.strftime('%Y-%m-%d'))
     query = """
         SELECT * FROM {0}.{1}
         WHERE
-            fdate='{2}'
-        """.format(schema, table, date.strftime('%Y-%m-%d'))
+            {2}
+        """.format(schema, table, where)
     cur.execute(query)
     if bool(cur.rowcount):
         # TODO: This has to go in a log
         warnings.warn("Overwriting raster in {0}.{1} table for {1}".format(
-            schema, table, date.strftime("%Y-%m-%d")
+            schema, table, query.replace('\n', " ")
         ))
         query = """
             DELETE FROM {0}.{1} 
             WHERE
-                fdate='{2}'
-            """.format(schema, table, date.strftime("%Y-%m-%d"))
+                {2}
+            """.format(schema, table, where)
         cur.execute(query)
         con.commit()
     cur.close()
@@ -443,7 +508,20 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
                 CREATE INDEX {0}_par ON {1} (par);
                 """.format(table, temptable)
             cur.execute(query)
-        # TODO: Add ens index when necessary
+        if ens is not None:
+            columns.append("ens")
+            query = """
+                ALTER TABLE {0} ADD COLUMN ens integer
+                """.format(temptable)
+            cur.execute(query)
+            query = """
+                UPDATE {0} SET ens = {1}
+                """.format(temptable, ens)
+            cur.execute(query)
+            query = """
+                CREATE INDEX {0}_ens ON {1} (ens);
+                """.format(table, temptable)
+            cur.execute(query)
         # Copy to permanent table
         query = """
             INSERT INTO {0}.{1}({2}) (SELECT {2} FROM {3});

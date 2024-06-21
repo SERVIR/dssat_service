@@ -287,7 +287,7 @@ def init_stress_chart(stress_type):
     my_chart.options.tooltip = {
         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-            '<span style="font-size: 12px">{series.name}: {point.y:.1f} %</span><br/>'
+            '<span style="font-size: 12px">{series.name}: {point.y:.0f} %</span><br/>'
     }  
     return my_chart
 
