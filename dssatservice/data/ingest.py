@@ -4,7 +4,7 @@ download, transform, and ingestion process.
 """
 from datetime import datetime, timedelta
 import os 
-
+import shutil
 import sys
 # sys.path.append("..")
 import dssatservice.database as db
@@ -15,7 +15,9 @@ from tqdm import tqdm
 
 import rasterio as rio
 import pandas as pd
+import numpy as np
 import logging
+
 
 VARIABLES_ERA5_NC = db.VARIABLES_ERA5_NC
 
@@ -248,3 +250,228 @@ def ingest_baseline_run(dbname:str, schema:str, csv:str):
             )
         cur.execute(query)
         con.commit()
+        
+def ingest_nmme_rain(dbname:str, schema:str, ens:int):
+    logger = logging.getLogger(__name__)
+    if not db.table_exists(dbname, schema, f"nmme_rain"):
+         db._create_climate_forecast_table(dbname, schema, f"nmme_rain")
+    con = db.connect(dbname)
+    cur = con.cursor()
+    bbox = db.get_envelope(dbname, schema)
+    
+    # Get the reference geotransform raster from the climatology raster
+    where = f"\"month\"=1 AND variable=\\'tmean_mean\\'"
+    ref_rast = "/tmp/refrast.tiff"
+    transform.db_to_tiff(dbname, schema, "era5_clim", where, ref_rast)
+    
+    # Download forecast
+    variable = "Precipitation"
+    folder, files = download.download_nmme(
+        variable, ens, bbox, geotrans_ref=ref_rast
+    )
+    files_dict = {
+        datetime.strptime(f.split(".")[0], "%Y%m%d"): f
+        for f in sorted(files)
+    } 
+    
+    # Save to DB
+    table = f"nmme_rain"
+    for date, file in files_dict.items():
+        file_path = os.path.join(folder, f"gtr{file}")
+        # Delete rasters if exists
+        where = "fdate='{0}' AND ens={1}".format(date.strftime("%Y-%m-%d"), ens)
+        db.delete_rasters(dbname, schema, table, where=where)
+        db.tiff_to_db(file_path, dbname, schema, table, date, ens=ens)
+        logger.info(
+            f"\nNMME INGEST: {date.date()} nmme_rain ens {ens} for {schema} ingested\n"
+        )         
+    shutil.rmtree(folder)
+
+def ingest_nmme_temp(dbname:str, schema:str, ens:int):
+    """
+    Ingest nmme temperature data. For that it conducts the next steps:
+        1. Download and geotransform nmme data
+        2. Calculate monthly bias based on the climatology in era5_clim table
+        3. Adjust daily Tmean series using the monthly bias
+        4. Estimates Tmax and Tmean using the monthly average Trange.
+        5. Saves Tmax and Tmin in the DB
+    """
+    logger = logging.getLogger(__name__)
+    variables = ["tmin", "tmax"]
+    for var in variables:
+        if not db.table_exists(dbname, schema, f"nmme_{var}"):
+            db._create_climate_forecast_table(dbname, schema, f"nmme_{var}")
+    con = db.connect(dbname)
+    cur = con.cursor()
+    bbox = db.get_envelope(dbname, schema)
+    
+    # Get the reference geotransform raster from the climatology raster
+    where = f"\"month\"=1 AND variable=\\'tmean_mean\\'"
+    ref_rast = "/tmp/refrast.tiff"
+    transform.db_to_tiff(dbname, schema, "era5_clim", where, ref_rast)
+    
+    # Download forecast
+    variable = "Temperature"
+    folder, files = download.download_nmme(
+        variable, ens, bbox, geotrans_ref=ref_rast
+    )
+    files_dict = {
+        datetime.strptime(f.split(".")[0], "%Y%m%d"): f
+        for f in sorted(files)
+    } 
+    
+    # Create the monthly bias raster
+    months = set([d.month for d in files_dict.keys()])
+    for month in months:
+        forecast_avg_path = os.path.join(folder, f"Tavg{month}.tiff")
+        tiff_list = [
+            os.path.join(folder, f"gtr{f}")
+            for d, f in files_dict.items()
+            if d.month == month
+        ]
+        # Forecast monthly average
+        transform.tiff_union(tiff_list, forecast_avg_path)
+        # Climatology monthly average
+        ref_rast = "/tmp/refrast.tiff"
+        where = f"\"month\"={month} AND variable=\\'tmean_mean\\'"
+        transform.db_to_tiff(dbname, schema, "era5_clim", where, ref_rast)
+        # Monthly bias
+        bias_path = os.path.join(folder, f"bias{month}.tiff")
+        transform.rast_calc(
+            A=ref_rast, B=forecast_avg_path, calc="A-B", 
+            outfile=bias_path
+        )
+        
+    # Create Tmax and Tmin from Tmean and Trange
+    months = set([d.month for d in files_dict.keys()])
+    for month in months:
+        trange_path = "/tmp/tmprast_trange.tiff"
+        where = f"\"month\"={month} AND variable=\\'trange_mean\\'"
+        transform.db_to_tiff(dbname, schema, "era5_clim", where, trange_path)
+        files_month = {
+            d: f for d, f in files_dict.items()
+            if d.month == month
+        } 
+        for date, file in files_month.items():
+            file_path = os.path.join(folder, f"gtr{file}")
+            # Bias adjust Tmean
+            bias_path = os.path.join(folder, f"bias{date.month}.tiff")
+            biasadj_path = os.path.join(folder, f"adj{file}")
+            transform.rast_calc(
+                A=file_path, B=bias_path, calc="A+B", 
+                outfile=biasadj_path
+            )
+            # Create Tmin
+            tmin_path = os.path.join(folder, f"tmin{file}")
+            transform.rast_calc(
+                A=biasadj_path, B=trange_path, calc="A-B", 
+                outfile=tmin_path
+            )
+            # Create Tmax
+            tmax_path = os.path.join(folder, f"tmax{file}")
+            transform.rast_calc(
+                A=biasadj_path, B=trange_path, calc="A+B", 
+                outfile=tmax_path
+            )
+    
+    # Save Tmax and Tmin to DB
+    for date, file in files_dict.items():
+        for var in ["tmin", "tmax"]:
+            table = f"nmme_{var}"
+            file_path = os.path.join(folder, f"{var}{file}")
+            where = "fdate='{0}' AND ens={1}".format(date.strftime("%Y-%m-%d"), ens)
+            db.delete_rasters(dbname, schema, table, where=where)
+            db.tiff_to_db(file_path, dbname, schema, table, date, ens=ens)
+            logger.info(
+                f"\nNMME INGEST: {date.date()} {table} ens {ens} for {schema} ingested\n"
+            )         
+    shutil.rmtree(folder)
+    
+def ingest_nmme(dbname:str, schema:str):
+    for e in range(1, 11):
+        ingest_nmme_temp(dbname, schema, e)
+        ingest_nmme_rain(dbname, schema, e)
+
+def calculate_climatology(dbname:str, schema:str):
+    table = "era5_clim"
+    assert not db.table_exists(dbname, schema, table), \
+        f"{schema}.{table} exists. Drop the table before running this function  "
+    db._create_climatology_table(dbname, schema)
+    ds = "era5"
+    months = range(1, 13)
+    con = db.connect(dbname)
+    cur = con.cursor()
+    variables = ["tmax", "tmin"]
+    for month in months:
+        for var in variables:
+            table = f"{ds}_{var}"
+            agg = 'mean'
+            variable = f"{var}_{agg}"
+            rast_query = """
+                SELECT ST_Union(rast, '{3}') as rast FROM {0}.{1}
+                WHERE
+                    date_part('month', fdate)={2}
+            """.format(schema, table, month, agg.upper())
+            sql = """
+                WITH agg As ({4})
+                INSERT INTO {0}.{1} ("month", variable, rast)(
+                    SELECT {2}, '{3}', agg.rast FROM agg
+                )
+                    
+            ;""".format(schema, f"{ds}_clim", month, variable, rast_query)
+            cur.execute(sql)
+            con.commit()
+            print(f"{var} {month} row created")
+        # Mean temperature raster
+        rast_query = """
+            SELECT ST_Union(rast, 'MEAN') as rast FROM {0}.{1}
+            WHERE
+                "month"={2}
+        """.format(schema, f"{ds}_clim", month)
+        sql = """
+            WITH temps As ({4})
+            INSERT INTO {0}.{1} ("month", variable, rast)(
+                SELECT {2}, '{3}', temps.rast FROM temps
+            )
+                
+        ;""".format(schema, f"{ds}_clim", month, "tmean_mean", rast_query)
+        cur.execute(sql)
+        con.commit()
+        print(f"tmean {month} row created")
+        # Temperature range raster
+        rast_query = """
+            -- Time series of temperature range for that month
+            WITH merged As (
+                SELECT * FROM {0}.era5_tmax
+                    WHERE date_part('month', fdate)={1}
+                UNION ALL
+                (SELECT * FROM {0}.era5_tmin
+                    WHERE date_part('month', fdate)={1})
+            )
+            SELECT fdate, ST_Union(rast, 'RANGE') as rast FROM merged
+            GROUP BY fdate
+        """.format(schema, month)
+        sql = """
+            WITH Trange As ({4})
+            INSERT INTO {0}.{1} ("month", variable, rast)(  
+                SELECT {2}, '{3}', ST_Union(rast, 'MEAN') FROM Trange
+            )
+        ;""".format(schema, f"{ds}_clim", month, "trange_mean", rast_query)
+        cur.execute(sql)
+        con.commit()
+        print(f"trange_mean {month} row created")
+        sql = """
+            WITH Trange As ({4})
+            INSERT INTO {0}.{1} ("month", variable, rast)(  
+                SELECT {2}, '{3}', ST_Union(rast, 'RANGE') FROM Trange
+            )
+        ;""".format(schema, f"{ds}_clim", month, "trange_range", rast_query)
+        cur.execute(sql)
+        con.commit()
+        print(f"trange_range {month} row created")
+    cur.close()
+    con.close()
+            
+        
+        
+    

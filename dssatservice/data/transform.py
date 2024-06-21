@@ -9,10 +9,12 @@ import pandas as pd
 
 import tempfile
 from datetime import datetime
-import re 
+import re
+import subprocess
 
 from osgeo import gdal
 from osgeo import osr
+from osgeo_utils import gdal_calc
 
 def write_tiff(lat, lon, res, data, tiffpath=None, epsg=4326):
     """
@@ -121,4 +123,44 @@ def parse_overview(overview_str):
                 [n, key] + l.replace(key, "").split()
             )
     df = pd.DataFrame(lines, columns=["RUN"]+list(ENV_STRESS_COLNAMES))
-    return df   
+    return df  
+
+def reproject_raster(rin, rout, rref, resampling="bilinear"):
+    """
+    Reprojects the rin to rout using rref as reference for extent and resolution.
+    """ 
+    ref_ds = gdal.Open(rref)
+    x_size, y_size = ref_ds.RasterXSize, ref_ds.RasterYSize
+    x_min, dx, _, y_max, _, dy = ref_ds.GetGeoTransform()
+    x_max = x_min + dx*x_size
+    y_min = y_max + dy*y_size
+    warp_options = gdal.WarpOptions(
+        format="GTiff", outputBounds=(x_min, y_min, x_max, y_max),
+        width=x_size, height=y_size, resampleAlg=resampling
+    )
+    gdal.Warp(rout, rin, options=warp_options)
+    
+def tiff_union(tifflist, tiffout, redf=np.mean, calc="mean(a,axis=0)"):
+    """Takes a list of input tiffs and reduce them to a single raster using
+        the function specified in redf. Rasters must be compatible: same size
+        and resolution"""
+    gdal_calc.Calc(calc=calc, a=tifflist, outfile=tiffout)
+
+def db_to_tiff(dbname, schema, table, where, saveto):
+    """
+    Exports raster fom table to tiff.
+    """
+    sql_args = \
+        f"PG:dbname='{dbname}' user='user' password='password' " + \
+        f"schema='{schema}' table='{table}' where='{where}' " +\
+        "mode='2'"
+    translate_options = gdal.TranslateOptions(format="GTiff")
+    gdal.Translate(destName=saveto, srcDS=sql_args, options=translate_options)
+    
+    
+def rast_calc(A, B, calc, outfile):
+    """
+    Does raster calculations using numpy syntax. calc is the operation to perform,
+    for example A + B
+    """
+    gdal_calc.Calc(calc, A=A, B=B, outfile=outfile)
