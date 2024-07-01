@@ -330,7 +330,7 @@ def init_columnRange_chart(session):
     }
     my_chart.options.y_axis = {
         "title": {
-            'text': 'Experiment', 
+            'text': 'Yield (t/ha)', 
             "style": {
                 "font-size": "15px",
             }
@@ -340,18 +340,44 @@ def init_columnRange_chart(session):
                 "font-size": "15px",
             }
         },
-        "plot_lines": [{
-            "value": session.adminBase.validation_run.obs.mean(),
-            "color": "#FF0000",
-            "width": 3,
-            "dash_style": "Dash",
-            "z_index": 99,
-            "label": {
-                "text": f"{ADMIN_NAMES[session.adminBase.schema]}<br/>average",
-                "align": "left",
-                "style": {"color": "black", "font-size": 13}
+        "plot_lines": [
+            {
+                "value": session.adminBase.validation_run.obs.mean(),
+                "color": "#32323232",
+                "width": 8,
+                "dash_style": "Solid",
+                "z_index": 99,
+                "label": {
+                    "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>average</b>",
+                    "align": "left",
+                    "style": {"color": "black", "font-size": 13}
+                }
+            },
+            {
+                "value": session.adminBase.validation_run.obs.min(),
+                "color": "#32323232",
+                "width": 3,
+                "dash_style": "Dash",
+                "z_index": 99,
+                "label": {
+                    "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>min</b>",
+                    "align": "left",
+                    "style": {"color": "black", "font-size": 13}
+                }
+            },
+            {
+                "value": session.adminBase.validation_run.obs.max(),
+                "color": "#32323232",
+                "width": 3,
+                "dash_style": "Dash",
+                "z_index": 99,
+                "label": {
+                    "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>max</b>",
+                    "align": "left",
+                    "style": {"color": "black", "font-size": 13}
+                }
             }
-        }]
+        ]
     }
     my_chart.options.x_axis = {
         "title": {
