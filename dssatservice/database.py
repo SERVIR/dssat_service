@@ -407,7 +407,7 @@ def delete_rasters(dbname, schema, table, date=None, where=None):
     con = connect(dbname)
     cur = con.cursor()
     if (where is None):
-        where = "fdate='{2}'".format( date.strftime('%Y-%m-%d'))
+        where = "fdate='{0}'".format(date.strftime('%Y-%m-%d'))
     query = """
         SELECT * FROM {0}.{1}
         WHERE
@@ -584,6 +584,16 @@ def verify_series_continuity(con, schema:str, table:str,
     cur.close()
     return dates_notin_db
     
+def latest_date(con, schema:str, table:str):
+    """
+    Returns the latest available date in that table
+    """
+    cur = con.cursor()
+    query = f"SELECT max(fdate) FROM {schema}.{table};"
+    cur.execute(query)
+    dt = cur.fetchall()[0][0]
+    return datetime(dt.year, dt.month, dt.day)
+    
 
 def get_era5_for_point(con, schema:str, lon:float, lat:float,
                        datefrom:datetime, dateto:datetime):
@@ -620,6 +630,56 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
             AND fdate>=date '{4}' AND fdate<=date '{5}'
         """.format(schema, var, lon, lat, datefrom.strftime("%Y-%m-%d"),
                    dateto.strftime("%Y-%m-%d"))
+        cur.execute(query)
+        rows = np.array(cur.fetchall())
+        if len(rows) < 1:
+            warnings.warn(f"{var} data is NULL at location {lon}, {lat}")
+            continue
+        df[var] = Series(rows[:, 1], index=rows[:, 0])
+    
+    cur.close()
+    if df.isna().any().any():
+        warnings.warn(f"Data is NULL at location {lon}, {lat}")
+        return
+    return df.sort_index()
+
+def get_nmme_for_point(con, schema:str, lon:float, lat:float,
+                       datefrom:datetime, dateto:datetime, ens:int):
+    """
+    Get the weather series for the requested point, ensemble and time period. 
+    It returns a dict containing the series for each weather variable. It 
+    returns a df with the time series for that point.
+    """
+    for var in VARIABLES_ERA5_NC.keys():
+        if var == "srad":
+            continue
+        table = f"nmme_{var}"
+        dates_notin_db = verify_series_continuity(
+            con, schema, table, datefrom, dateto
+        )
+        assert len(dates_notin_db) == 0, \
+            f"Dates are missing in {table}: {dates_notin_db}. Ingest that data first"
+    
+    # Get rain data. This will also get the rid to make next queries using 
+    # rid instead of spatial relations
+    variables = ["tmax", "tmin", "rain"]
+    var = variables[0]
+
+    cur = con.cursor()
+    
+    df = DataFrame()
+    for var in variables:
+        query = """
+        SELECT fdate, ST_value(ra.rast, pn.pt_geom) AS val
+        FROM {0}.nmme_{1} AS ra,
+            (
+                SELECT ST_SetSRID(ST_Point({2}, {3}), 4326) AS pt_geom
+            ) AS pn
+        WHERE
+            ST_Within(pn.pt_geom, ST_Envelope(rast))
+            AND fdate>=date '{4}' AND fdate<=date '{5}' AND ens={6}
+        """.format(schema, var, lon, lat, datefrom.strftime("%Y-%m-%d"),
+                   dateto.strftime("%Y-%m-%d"), ens)
         cur.execute(query)
         rows = np.array(cur.fetchall())
         if len(rows) < 1:

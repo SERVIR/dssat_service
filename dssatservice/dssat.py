@@ -14,10 +14,15 @@ import tempfile
 import os
 import shutil
 from tqdm import tqdm
+import logging
+
+# For SRAD estimation when using NMME data
+from sklearn.neighbors import KNeighborsRegressor
 
 
 MIN_SAMPLES = 4
-MAX_SIM_LENGTH = 12*30 # This is maximum simulation lenght since planting. 
+MAX_SIM_LENGTH = 8*30 # This is maximum simulation lenght since planting. 
+logger = logging.getLogger(__name__)
 
 def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
@@ -109,15 +114,49 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     tav_exists = db.verify_static_par_exists(dbname, schema, "tav", con)
     tamp_exists = db.verify_static_par_exists(dbname, schema, "tamp", con)
     
-    for (n, (soil, weather)) in tqdm(list(enumerate(zip(soil_pixels, weather_pixels)))):
+    iter_pixels = list(enumerate(zip(soil_pixels, weather_pixels)))
+    for (n, (soil, weather)) in tqdm(iter_pixels):
         soil_profile = soils.loc[
             (soils.lon==soil[0]) & (soils.lat==soil[1]),
             "soil" 
         ].values[0]
-        weather_df = db.get_era5_for_point(
-            con, schema, weather[0], weather[1], 
-            start_date, end_date
-        )
+        
+        # Get weather
+        # Verify that all the series are available from past weather
+        latest_past_weather = db.latest_date(con, schema, "era5_rain")
+        if latest_past_weather >= end_date: # End of season
+            weather_df = db.get_era5_for_point(
+                con, schema, weather[0], weather[1], 
+                start_date, end_date
+            )
+        else: # Forecast
+            latest_forecast_weather = db.latest_date(con, schema, "nmme_rain")
+            end_date = latest_forecast_weather
+            # Get latest year of past weather. That year is used to train a 
+            # KNN estimator for srad
+            past_weather_df = db.get_era5_for_point(
+                con, schema, weather[0], weather[1], 
+                latest_past_weather - timedelta(365), latest_past_weather
+            )
+            ens = np.random.randint(1, 11)
+            future_weather_df = db.get_nmme_for_point(
+                con, schema, weather[0], weather[1], 
+                latest_past_weather, end_date, ens
+            )            
+            # Estimate future srad using KNN
+            knn_reg = KNeighborsRegressor()
+            x = past_weather_df[["tmax", "tmin", "rain"]].to_numpy()
+            y = past_weather_df["srad"].to_numpy()
+            knn_reg.fit(x, y)
+            future_weather_df["srad"] = knn_reg.predict(
+                future_weather_df[["tmax", "tmin", "rain"]].to_numpy()
+            )
+            weather_df = pd.concat([past_weather_df, future_weather_df])
+            weather_df = weather_df.sort_index()
+            weather_df = weather_df.loc[
+                pd.to_datetime(weather_df.index) >= start_date
+            ]
+            
         if tav_exists and tamp_exists:
             tav = db.get_static_par(con, schema, weather[0], weather[1], "tav")
             tamp = db.get_static_par(con, schema, weather[0], weather[1], "tamp")
@@ -195,6 +234,12 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
         sim_controls=sim_controls
     )
     tmp_dir.cleanup()
+    if (out.MAT == "-99").mean() > .5:
+        logger.warn(
+            "Most of the simulations were terminated before reaching maturity. "
+            "It is likely that the available weather data was not long enough "
+            "to complete the simulation."
+        )
     # print("")
     if overview:
         return out, gs.overview

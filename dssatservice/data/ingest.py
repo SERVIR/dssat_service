@@ -364,13 +364,13 @@ def ingest_nmme_temp(dbname:str, schema:str, ens:int):
             # Create Tmin
             tmin_path = os.path.join(folder, f"tmin{file}")
             transform.rast_calc(
-                A=biasadj_path, B=trange_path, calc="A-B", 
+                A=biasadj_path, B=trange_path, calc="A-0.5*B", 
                 outfile=tmin_path
             )
             # Create Tmax
             tmax_path = os.path.join(folder, f"tmax{file}")
             transform.rast_calc(
-                A=biasadj_path, B=trange_path, calc="A+B", 
+                A=biasadj_path, B=trange_path, calc="A+0.5*B", 
                 outfile=tmax_path
             )
     
