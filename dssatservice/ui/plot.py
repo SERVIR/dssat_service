@@ -111,8 +111,12 @@ def validation_chart(session:Session):
     data = tmp_df.groupby("year").obs.mean().round(3).reset_index().to_numpy()
     scatter = ScatterSeries().from_array(data)
     scatter.name = "Observed"
-    scatter.color = "#ff3300"
-    scatter.marker = {"symbol": "square", "radius": 6}
+    # scatter.color = "#ff3300"
+    scatter.color = "#FFFFFF"
+    scatter.marker = {
+        "symbol": "square", "radius": 6, "line_color":"#000000",
+        "line_width": 2, 
+    }
     scatter.tooltip = {
         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
