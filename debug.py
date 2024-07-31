@@ -121,7 +121,7 @@ def ingest_static_data():
 
 if __name__ == "__main__":
     # NMME Download
-    schema = "kenya"
+    schema = "zimbabwe"
     # Get the envelope for that region
     # bbox = get_envelope(dbname, schema)
     # download_nmme("Precipitation", 1, bbox)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # ingest_nmme_rain(dbname, schema, 1)
     # ingest_nmme_temp(dbname, schema, 1)
     # ingest_nmme(dbname, schema)
-    run_model_forecast()
+    # run_model_forecast()
     # con = connect(dbname)
     # admin = admin_list(con, "kenya")
     # session = Session(AdminBase(con, "kenya", "Bomet"))

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as  pd
 from dataclasses import dataclass
+from . import FAKE_OVERVIEW
 
 CULTIVAR_NAMES = {
     'KY0018': 'KATUMANICOMP-II', 'KY0016': 'HAC ', 'KY0014': 'KATUMANICOMPI',
@@ -179,10 +180,18 @@ class Session:
         )
         
     
-    def run_experiment(self, baseline_run=False, **kwargs):
+    def run_experiment(self, fakerun=False, baseline_run=False, **kwargs):
         """
         Runs the model using the lastest parameters defined.
         """
+        if fakerun: # To test plots when the model is not locally set up
+            self.latest_run = pd.DataFrame({
+                "HARWT": (np.random.normal(0, 1, 50)*100) + 500,
+                "MAT": np.random.uniform(100, 180, 50)
+            })
+            self.latest_overview = [f"{i}\n" for i in FAKE_OVERVIEW.split("\n")]
+            self.add_experiment_results()
+            return
         nitro = list(zip(self.simPars.nitrogen_dap, self.simPars.nitrogen_rate))
         if baseline_run:
             plantingdate = datetime(
@@ -196,8 +205,9 @@ class Session:
                 self.simPars.planting_date.month, 
                 self.simPars.planting_date.day
             )
-        planting_window_start = plantingdate - timedelta(days=5)
-        planting_window_end = plantingdate + timedelta(days=5)
+        TIMEDELTA_WINDOW = 1
+        planting_window_start = plantingdate - timedelta(days=TIMEDELTA_WINDOW)
+        planting_window_end = plantingdate + timedelta(days=TIMEDELTA_WINDOW)
         sim_controls = {
             "PLANT": "F", # Automatic, force in last day of window
             "PFRST": planting_window_start.strftime("%y%j"),
