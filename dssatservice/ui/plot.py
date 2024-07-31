@@ -182,7 +182,7 @@ def init_anomalies_chart():
     my_chart.options.legend = Legend(
         label_format='<span style="font-size: 12px">{name}</span><br/>'
     )
-    return my_chart
+    return my_chart.to_dict()
 
 # Limit for what is considered "Normal". 0.44 Splits equal groups (terciles)
 Z_LIM = 0.44
@@ -198,12 +198,15 @@ def assign_categories(data):
     very_high = (data > Z_EXT_LIM).mean()*100
     high = (data > Z_LIM).mean()*100 - very_high
     norm = 100 - low - high - very_high - very_low
-    return list(map(int, [very_high, high, norm, low, very_low]))
+    
+    cats = {
+        "Very low": int(very_low), "Low": int(low), "Normal": int(norm),
+        "High": int(high), "Very high": int(very_high)
+    }
+    return cats
+    # return list(map(int, [very_high, high, norm, low, very_low]))
 
-def add_anomaly_bar(chart, session, model_based=True):
-    """
-    Add an anomaly bar to one existing anomaly chart
-    """
+def get_anomaly_series_data(session, model_based=True):
     # This is for anomaly based in model
     if model_based:
         data = session.adminBase.get_quantile_anomalies(session.latest_run)
@@ -230,20 +233,15 @@ def add_anomaly_bar(chart, session, model_based=True):
     label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
         f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
         f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
-    x = label
-    series = chart.to_dict()["userOptions"]["series"]
-    for n, cat in enumerate(cat_data):
-        series_data = series[n].get("data", [])
-        series_data += [(x, cat)]
-        series[n]["data"] = series_data
-    chart.update_series(*series)
+    new_data = {}
+    for key, val in cat_data.items():
+        new_data[key] = (label, val)
+    return new_data
 
-def clear_anomaly_chart(chart):
+def clear_yield_chart(chart_dict):
     """"""
-    series = chart.to_dict()["userOptions"]["series"]
-    for n, serie in enumerate(series):
-        series[n]["data"] = []
-    chart.update_series(*series)
+    for serie in chart_dict["userOptions"]["series"]:
+        serie["data"] = []
 
 def init_stress_chart(stress_type):
     """
@@ -293,7 +291,7 @@ def init_stress_chart(stress_type):
         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
             '<span style="font-size: 12px">{series.name}: {point.y:.0f} %</span><br/>'
     }  
-    return my_chart
+    return my_chart.to_dict()
 
 def process_overview(overview):
     overview = parse_overview("".join(overview))
@@ -302,23 +300,21 @@ def process_overview(overview):
     overview["nitroStress"] = overview[['stressNitPhto', 'stressNitGro']].max(axis=1)
     return overview
 
-def add_stress_bar(chart, session):
-    "data is pandas.Series with the dev stage as index"
+def get_stress_series_data(session, stresstype):
+    """
+    data is pandas.Series with the dev stage as index. stresstype is one among
+    water or nitrogen
+    """
     overview = process_overview(session.latest_overview.copy())
-    var_column = STRESS_COLUMNS[chart.options.title.text.split()[0].lower()]
+    var_column = STRESS_COLUMNS[stresstype]
     data = overview.groupby("devPhase")[var_column].mean()
     data = 100*data
     box = ColumnSeries()
     box.data = [data.to_dict().get(dev_st) for dev_st in DEV_STAGES]
-    if chart.options.series is None:
-        n = 0
-    else:
-        n = len(chart.options.series)
-    box.name = f"Exp {n}"
-    chart.add_series(box)
+    return box.to_dict()
     
-def clear_stress_chart(chart):
-    chart.options.series = None
+def clear_stress_chart(chart_dict):
+    chart_dict["userOptions"]["series"] = None
     
 def init_columnRange_chart(session):
     """
@@ -411,27 +407,27 @@ def init_columnRange_chart(session):
                 color=COLORS[n], grouping=False, border_width=0.
             )
         )
-    return my_chart
-
-def add_yield_column(chart, session, series_idx=0, qrange=(.05, .95)):
+    return my_chart.to_dict()
+        
+def get_columnRange_series_data(session):
+    """
+    Get the series data for the columnRange chart using the results from the 
+    latest simulation
+    """
     tmp_df = session.latest_run
     tmp_df['year'] = 1
     tmp_df["sim"] = tmp_df.HARWT.astype(float)/1000
-    data = dict(zip(("low", "high"), columnRange_data(tmp_df, qrange)[0][1:]))
+    
+    new_data = {}
+    for n, q in enumerate(Q_RANGE_PLOTS):
+        series_name = f"Simulated yield ({SERIES_CI[n]}% CI)"
+        data = dict(zip(("low", "high"), columnRange_data(tmp_df, q)[0][1:]))
 
-    label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
-            f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
-            f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
+        label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
+                f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
+                f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
 
-    data["name"] = label
-    data["x"] = label
-
-    series = chart.options.series[series_idx]
-    if series.data is None:
-        series.data = [data]
-    else:
-        series.data += [data]
-
-def add_yield_ci_columns(chart, session):
-    for n, qrange in enumerate(Q_RANGE_PLOTS):
-        add_yield_column(chart, session, n, qrange)
+        data["name"] = label
+        data["x"] = label
+        new_data[series_name] = data
+    return new_data
