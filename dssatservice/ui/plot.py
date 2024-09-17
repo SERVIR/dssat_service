@@ -12,6 +12,10 @@ from highcharts_core.options.series.bar import ColumnSeries
 from highcharts_core.options.plot_options.bar import ColumnOptions
 from highcharts_core.options.legend import Legend
 
+from matplotlib import colormaps
+from matplotlib.colors import to_hex
+from datetime import timedelta
+
 from .base import AdminBase, Session, QUANTILES_TO_COMPARE
 from dssatservice.data.transform import parse_overview
 
@@ -54,6 +58,103 @@ def columnRange_data(df, qrange=(.05, .95)):
         )
     return data
 
+# def validation_chart(session:Session):
+#     adminBase=session.adminBase
+#     my_chart = Chart()
+#     my_chart.options = HighchartsOptions()
+#     my_chart.options.title = {
+#         'text': f'Observed and Simulated yield for the baseline scenario in {adminBase.admin1}', 
+#         "style": {
+#             "font-size": "15px"
+#         }
+#     }
+#     my_chart.options.y_axis = {
+#         "title": {
+#             'text': 'Yield (t/ha)', 
+#             "style": {
+#                 "font-size": "15px"
+#             }
+#         },
+#         "labels": {
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         }
+#     }
+#     my_chart.options.x_axis = {
+#         "title": {
+#             'text': 'Year', 
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         },
+#         "labels": {
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         }
+#     }
+#     my_chart.options.tooltip = {
+#         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+#         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+#             '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
+#     }
+#     my_chart.options.legend = Legend(
+#         label_format='<span style="font-size: 12px">{name}</span><br/>'
+#     )
+#     tmp_df = adminBase.validation_run
+#     for n, qrange in enumerate(Q_RANGE_PLOTS):
+#         data = columnRange_data(tmp_df, qrange)
+#         column = ColumnRangeSeries().from_array(data)
+#         column.name = f"Simulated yield ({SERIES_CI[n]}% CI)"
+#         column.color = COLORS[n]
+#         column.grouping = False
+#         column.border_width = 0.
+#         my_chart.add_series(column)
+#     # Observed scatterplot
+#     data = tmp_df.groupby("year").obs.mean().round(3).reset_index().to_numpy()
+#     # scatter = ScatterSeries().from_array(data)
+#     scatter = ScatterSeries().from_dict({
+#         "data": [
+#             {"x": x, "y": y} for x, y in data
+#         ]
+#     })
+#     scatter.name = "Observed"
+#     # scatter.color = "#ff3300"
+#     scatter.color = "#FFFFFF"
+#     scatter.marker = {
+#         "symbol": "square", "radius": 6, "line_color":"#000000",
+#         "line_width": 2, 
+#     }
+#     scatter.tooltip = {
+#         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+#         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+#             '<span style="font-size: 12px">{series.name}: {point.y} kg/ha</span><br/>'
+#     }
+#     my_chart.add_series(scatter)
+#     return my_chart.to_dict()
+
+def get_bin_counts(series):
+    MAX_BINS = 10
+    vals = series.sort_values().to_numpy()
+    vals = vals + np.random.normal(0, .001, 50)
+    min_step = (vals.max() - vals.min())/MAX_BINS
+    # min_step = vals.mean()*.2
+    bins = [vals[0]]
+    counts = [0]
+    for n, val in enumerate(vals[:-1]):
+        bin_limit = val + .5*(vals[n+1]-val)
+        counts[-1] += 1
+        if (val - bins[-1]) >= min_step: 
+            if counts[-1] < 3:
+                continue
+            else:
+                bins.append(bin_limit)
+                counts.append(0)
+    counts[-1] += 1
+    bins.append(vals[-1])
+    return np.array(counts), np.array(bins)
+
 def validation_chart(session:Session):
     adminBase=session.adminBase
     my_chart = Chart()
@@ -66,7 +167,7 @@ def validation_chart(session:Session):
     }
     my_chart.options.y_axis = {
         "title": {
-            'text': 'Yield (kg/ha)', 
+            'text': 'Yield (t/ha)', 
             "style": {
                 "font-size": "15px"
             }
@@ -90,28 +191,46 @@ def validation_chart(session:Session):
             }
         }
     }
-    my_chart.options.tooltip = {
-        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
-        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-            '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
-    }
     my_chart.options.legend = Legend(
         label_format='<span style="font-size: 12px">{name}</span><br/>'
     )
     tmp_df = adminBase.validation_run
-    for n, qrange in enumerate(Q_RANGE_PLOTS):
-        data = columnRange_data(tmp_df, qrange)
-        column = ColumnRangeSeries().from_array(data)
-        column.name = f"Simulated yield ({SERIES_CI[n]}% CI)"
-        column.color = COLORS[n]
+    for year in tmp_df.year.unique():
+        # counts, bins = get_bin_counts(tmp_df.loc[tmp_df.year==year].sim)
+        counts, bins = np.histogram(tmp_df.loc[tmp_df.year==year].sim, bins=5)
+        counts = counts/sum(counts)
+        
+        column = ColumnRangeSeries().from_dict({
+            "data":[
+                {
+                    'high': round(bins[n+1], 2), 'low': round(bins[n], 2), 'x': int(year), 
+                    "color": to_hex(colormaps["Greens"](count/.35)),
+                    "count": count, 
+                    "name": f'{bins[n]:.2f}-{bins[n+1]:.2f} t/ha',
+                    "custom": {
+                        "extraInformation": f'{100*count/sum(counts):.0f}% probability'
+                    }
+                }
+                for n, count in enumerate(counts)
+            ],
+            "borderWidth": 0,
+            "showInLegend": False
+        })
         column.grouping = False
-        column.border_width = 0.
+        column.tooltip = {
+            "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+
+        "pointFormat": '<span style="font-size: 12px">{point.custom.extraInformation}</span><br/>'
+    }
         my_chart.add_series(column)
     # Observed scatterplot
     data = tmp_df.groupby("year").obs.mean().round(3).reset_index().to_numpy()
-    scatter = ScatterSeries().from_array(data)
+    scatter = ScatterSeries().from_dict({
+        "data": [
+            {"x": x, "y": y} for x, y in data
+        ]
+    })
     scatter.name = "Observed"
-    # scatter.color = "#ff3300"
     scatter.color = "#FFFFFF"
     scatter.marker = {
         "symbol": "square", "radius": 6, "line_color":"#000000",
@@ -123,7 +242,9 @@ def validation_chart(session:Session):
             '<span style="font-size: 12px">{series.name}: {point.y} kg/ha</span><br/>'
     }
     my_chart.add_series(scatter)
-    return my_chart
+    my_chart.options.x_axis.min = tmp_df.year.min() - .5
+    my_chart.options.x_axis.max = tmp_df.year.max() + .5
+    return my_chart.to_dict()
 
 def init_anomalies_chart():
     """
@@ -215,10 +336,10 @@ def get_anomaly_series_data(session, model_based=True):
         yld = session.latest_run.HARWT.astype(float)/1000
         # mu based on observations
         mu = session.adminBase.validation_run.groupby("year").obs.mean().mean()
-        mu_log = np.log(mu) - .5*std_intra**2
         # std_intra represents the intra-region variability, which is not know from
         # observations, then it is assumed from simulations
         std_intra = session.adminBase.validation_run.sim.std()
+        mu_log = np.log(mu) - .5*std_intra**2
         std_intra_log = np.sqrt(np.log((std_intra**2 + mu**2)/mu**2))
         # std is the season-to-season variability, known from observations
         std = session.adminBase.validation_run.groupby("year").obs.mean().std()
@@ -291,7 +412,9 @@ def init_stress_chart(stress_type):
         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
             '<span style="font-size: 12px">{series.name}: {point.y:.0f} %</span><br/>'
     }  
-    return my_chart.to_dict()
+    my_chart = my_chart.to_dict()
+    my_chart["userOptions"]["series"] = []
+    return my_chart
 
 def process_overview(overview):
     overview = parse_overview("".join(overview))
@@ -314,8 +437,101 @@ def get_stress_series_data(session, stresstype):
     return box.to_dict()
     
 def clear_stress_chart(chart_dict):
-    chart_dict["userOptions"]["series"] = None
+    chart_dict["userOptions"]["series"] = []
     
+# def init_columnRange_chart(session):
+#     """
+#     Session is needed to get the average yield from adminBase
+#     """
+#     my_chart = Chart()
+#     my_chart.options = HighchartsOptions()
+#     my_chart.options.title = {
+#         'text': 'DSSAT simulated maize yield', 
+#         "style": {
+#             "font-size": "15px"
+#         }
+#     }
+#     my_chart.options.y_axis = {
+#         "title": {
+#             'text': 'Yield (t/ha)', 
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         },
+#         "labels": {
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         },
+#         "plot_lines": [
+#             {
+#                 "value": session.adminBase.validation_run.obs.mean(),
+#                 "color": "#32323232",
+#                 "width": 8,
+#                 "dash_style": "Solid",
+#                 "z_index": 99,
+#                 "label": {
+#                     "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>average</b>",
+#                     "align": "left",
+#                     "style": {"color": "black", "font-size": 13}
+#                 }
+#             },
+#             {
+#                 "value": session.adminBase.validation_run.obs.min(),
+#                 "color": "#32323232",
+#                 "width": 3,
+#                 "dash_style": "Dash",
+#                 "z_index": 99,
+#                 "label": {
+#                     "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>min</b>",
+#                     "align": "left",
+#                     "style": {"color": "black", "font-size": 13}
+#                 }
+#             },
+#             {
+#                 "value": session.adminBase.validation_run.obs.max(),
+#                 "color": "#32323232",
+#                 "width": 3,
+#                 "dash_style": "Dash",
+#                 "z_index": 99,
+#                 "label": {
+#                     "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>max</b>",
+#                     "align": "left",
+#                     "style": {"color": "black", "font-size": 13}
+#                 }
+#             }
+#         ]
+#     }
+#     my_chart.options.x_axis = {
+#         "title": {
+#             'text': 'Experiment', 
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         },
+#         "labels": {
+#             "style": {
+#                 "font-size": "15px",
+#             }
+#         }
+#     }
+#     my_chart.options.tooltip = {
+#         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+#         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+#             '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
+#     }
+#     my_chart.options.legend = Legend(
+#         label_format='<span style="font-size: 12px">{name}</span><br/>'
+#     )
+#     for n, _ in enumerate(Q_RANGE_PLOTS):
+#         my_chart.add_series(
+#             ColumnRangeSeries(
+#                 name=f"Simulated yield ({SERIES_CI[n]}% CI)", 
+#                 color=COLORS[n], grouping=False, border_width=0.
+#             )
+#         )
+#     return my_chart.to_dict()
+
 def init_columnRange_chart(session):
     """
     Session is needed to get the average yield from adminBase
@@ -390,44 +606,85 @@ def init_columnRange_chart(session):
             "style": {
                 "font-size": "15px",
             }
-        }
-    }
-    my_chart.options.tooltip = {
-        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
-        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-            '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
-    }
-    my_chart.options.legend = Legend(
-        label_format='<span style="font-size: 12px">{name}</span><br/>'
-    )
-    for n, _ in enumerate(Q_RANGE_PLOTS):
-        my_chart.add_series(
-            ColumnRangeSeries(
-                name=f"Simulated yield ({SERIES_CI[n]}% CI)", 
-                color=COLORS[n], grouping=False, border_width=0.
-            )
-        )
-    return my_chart.to_dict()
+        },
+        "type": "Category",
         
-def get_columnRange_series_data(session):
+    }
+    my_chart = my_chart.to_dict()
+    my_chart["userOptions"]["series"] = []
+    return my_chart
+        
+# def get_columnRange_series_data(session):
+#     """
+#     Get the series data for the columnRange chart using the results from the 
+#     latest simulation
+#     """
+#     tmp_df = session.latest_run
+#     tmp_df['year'] = 1
+#     tmp_df["sim"] = tmp_df.HARWT.astype(float)/1000
+    
+#     new_data = {}
+#     for n, q in enumerate(Q_RANGE_PLOTS):
+#         series_name = f"Simulated yield ({SERIES_CI[n]}% CI)"
+#         data = dict(zip(("low", "high"), columnRange_data(tmp_df, q)[0][1:]))
+
+#         label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
+#                 f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
+#                 f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
+
+#         data["name"] = label
+#         data["x"] = label
+#         new_data[series_name] = data
+#     return new_data
+
+def get_columnRange_series_data(session, series_len):
     """
     Get the series data for the columnRange chart using the results from the 
-    latest simulation
+    latest simulation.
+    series_len is the current number of series in the chart
     """
     tmp_df = session.latest_run
     tmp_df['year'] = 1
     tmp_df["sim"] = tmp_df.HARWT.astype(float)/1000
     
-    new_data = {}
-    for n, q in enumerate(Q_RANGE_PLOTS):
-        series_name = f"Simulated yield ({SERIES_CI[n]}% CI)"
-        data = dict(zip(("low", "high"), columnRange_data(tmp_df, q)[0][1:]))
-
-        label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
-                f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
-                f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
-
-        data["name"] = label
-        data["x"] = label
-        new_data[series_name] = data
-    return new_data
+    counts, bins = np.histogram(tmp_df.sim, bins=5)
+    counts = counts/sum(counts)
+        
+    harvest_date_min = session.simPars.planting_date + \
+        timedelta(days=session.latest_run.MAT.astype(int).quantile(.25))
+    harvest_date_max = session.simPars.planting_date + \
+        timedelta(days=session.latest_run.MAT.astype(int).quantile(.75))
+    harvest_range = f"{harvest_date_min.strftime('%b %d %Y')} - {harvest_date_max.strftime('%b %d %Y')}"
+    
+    label = '<span style="font-size: 12px; font-weight: bold">' + \
+            f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
+            f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
+            f"Harvest on {harvest_range}<br>" + \
+            f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events" + \
+            "</span>"    
+    column = ColumnRangeSeries().from_dict({
+        "data":[
+            {
+                'high': round(bins[n+1], 2), 'low': round(bins[n], 2), 
+                "x": series_len + 1,
+                "color": to_hex(colormaps["Greens"](count/.35)),
+                "count": count, 
+                "custom": {
+                    "extraInformation": f'{label}<br>{bins[n]:.2f}-{bins[n+1]:.2f} t/ha<br>' + \
+                        f'({100*count/sum(counts):.0f}% probability)',
+                   
+                }
+            }
+            for n, count in enumerate(counts)
+        ],
+        "borderWidth": 0,
+        "showInLegend": False,
+        "pointInterval": 1,
+    })
+    
+    column.grouping = False
+    column.tooltip = {
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.extra}</span><br/>',
+        "pointFormat": '<span style="font-size: 12px">{point.custom.extraInformation}</span><br/>'
+    }
+    return column
