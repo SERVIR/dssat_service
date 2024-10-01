@@ -8,6 +8,7 @@ import shutil
 import sys
 # sys.path.append("..")
 import dssatservice.database as db
+import psycopg2 as pg
 
 from . import download
 from . import transform
@@ -52,7 +53,7 @@ def ingest_era5_record(dbname:str, schema:str, date:datetime):
                 f"\nERA5 INGEST: {date.date()} {ncvar} for {schema} ingested\n"
             )
         except Exception as e:
-            if "There is no data matching your request." in str(e):
+            if "Your request has not produced a valid" in str(e):
                 logger.info(
                     f"\nERA5 INGEST: {date.date()} {ncvar} for {schema} failed. " +\
                     "There is no data matching the request.\n"

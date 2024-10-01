@@ -30,6 +30,17 @@ def connect(dbname):
     con = pg.connect(database=dbname)
     return con
 
+def get_connection(dbname):
+    """
+    Retuns a connection. If dbname is a connection then it returns dbname. If not,
+    then it tries to return a local connection to dbname
+    """
+    if isinstance(dbname, pg.extensions.connection):
+        return con
+    else:
+        con = connect(dbname)
+        return con
+
 def create_schema(dbname, schema):
     """Creates a new schema"""
     con = connect(dbname)
