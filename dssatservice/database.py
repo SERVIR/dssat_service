@@ -27,23 +27,19 @@ VARIABLES_ERA5_NC = {
 TMP = tempfile.gettempdir()
 
 def connect(dbname):
-    con = pg.connect(database=dbname)
-    return con
-
-def get_connection(dbname):
     """
     Retuns a connection. If dbname is a connection then it returns dbname. If not,
     then it tries to return a local connection to dbname
     """
     if isinstance(dbname, pg.extensions.connection):
-        return con
+        return dbname
     else:
-        con = connect(dbname)
+        con = pg.connect(database=dbname)
         return con
 
-def create_schema(dbname, schema):
+def create_schema(con, schema):
     """Creates a new schema"""
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE SCHEMA {0};
@@ -51,12 +47,12 @@ def create_schema(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return
 
-def _create_reanalysis_table(dbname, schema, table):
+def _create_reanalysis_table(con, schema, table):
     """Creates a renalysis table"""
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
@@ -80,12 +76,12 @@ def _create_reanalysis_table(dbname, schema, table):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return 
 
-def _create_climate_forecast_table(dbname, schema, table):
+def _create_climate_forecast_table(con, schema, table):
     """Creates a climate forecast table"""
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
@@ -114,12 +110,12 @@ def _create_climate_forecast_table(dbname, schema, table):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return 
 
-def _create_static_table(dbname, schema):
+def _create_static_table(con, schema):
     """Creates table for static rasters"""
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.static (
@@ -143,13 +139,13 @@ def _create_static_table(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return 
 
-def _create_soil_table(dbname, schema):
+def _create_soil_table(con, schema):
     """Creates soil table"""
     table = "soil"
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
@@ -175,13 +171,13 @@ def _create_soil_table(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return 
 
-def _create_cultivars_table(dbname, schema):
+def _create_cultivars_table(con, schema):
     """Creates soil table"""
     table = "cultivars"
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
@@ -205,13 +201,13 @@ def _create_cultivars_table(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return
 
-def _create_baseline_pars_table(dbname, schema):
+def _create_baseline_pars_table(con, schema):
     """"""
     table = "baseline_pars"
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
@@ -231,13 +227,13 @@ def _create_baseline_pars_table(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return
 
-def _create_baseline_run_table(dbname, schema):
+def _create_baseline_run_table(con, schema):
     """"""
     table = "baseline_run"
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1} (
@@ -259,12 +255,12 @@ def _create_baseline_run_table(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
     return
 
-def _create_climatology_table(dbname, schema):
+def _create_climatology_table(con, schema):
     ds = "era5"
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         CREATE TABLE {0}.{1}_clim (
@@ -289,12 +285,12 @@ def _create_climatology_table(dbname, schema):
     cur.execute(query)
     con.commit()
     cur.close()
-    con.close()
+    # con.close()
 
 
-def schema_exists(dbname, schema):
+def schema_exists(con, schema):
     """Check if schema exists in database."""
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         SELECT * FROM information_schema.schemata 
@@ -304,15 +300,12 @@ def schema_exists(dbname, schema):
     cur.execute(query)
     schema_exists = bool(cur.rowcount)
     cur.close()
-    con.close()
+    # con.close()
     return schema_exists 
 
-def table_exists(dbname, schema, table, con=False):
+def table_exists(con, schema, table):
     """Check if table exists in the database."""
-    close_connection = False
-    if not con:
-        con = connect(dbname)
-        close_connection = True
+    # con = connect(dbname)
     cur = con.cursor()
     query = """
         SELECT * FROM information_schema.tables 
@@ -322,11 +315,9 @@ def table_exists(dbname, schema, table, con=False):
     cur.execute(query)
     table_exists = bool(cur.rowcount)
     cur.close()
-    if close_connection:
-        con.close()
     return table_exists
 
-def add_country(dbname:str, name:str, shapefile:str, 
+def add_country(con:pg.extensions.connection, name:str, shapefile:str, 
                 admin1:str="admin1"):
     """
     Add a country to the database. It will create a new schema and all of the 
@@ -335,8 +326,7 @@ def add_country(dbname:str, name:str, shapefile:str,
 
     Arguments
     ----------
-    dbname: str
-        Name of the database
+    con: pg.extensions.connection
     name: str
         Name of the country
     shapefile: str
@@ -355,12 +345,14 @@ def add_country(dbname:str, name:str, shapefile:str,
     tmp_shp = os.path.join(tmp_dir.name, "file.shp")
     gdf.to_file(tmp_shp, crs=4326)
 
-    if table_exists(dbname, name, "admin"):
+    if table_exists(con, name, "admin"):
         warnings.warn(f"{name}.admin exists, it will be overwriten")
     else:
-        create_schema(dbname, name)
-
-    cmd = f"shp2pgsql -d -s 4326 {tmp_shp} {name}.admin | psql -d {dbname}"
+        create_schema(con, name)
+    cur = con.cursor()
+    cur.execute("SELECT current_database()")
+    dbname = cur.fetchall()[0][0]
+    cmd = f"shp2pgsql -d -s 4326 {tmp_shp} {name}.admin | psql -d {dbname}"      # TODO: This won't work when there is a remote connection. 
     proc = subprocess.Popen(
         cmd, shell=True, stdout=subprocess.PIPE, 
         stderr=subprocess.STDOUT
@@ -369,8 +361,8 @@ def add_country(dbname:str, name:str, shapefile:str,
     tmp_dir.cleanup()
 
     # Create a materialized view for the envelope
-    con = connect(dbname)
-    cur = con.cursor()
+    # con = connect(dbname)
+   
     query = """
         CREATE MATERIALIZED VIEW {0}.bbox
         AS (
@@ -390,21 +382,21 @@ def add_country(dbname:str, name:str, shapefile:str,
     if not table_exists(dbname, name, f"cultivars"):
         _create_cultivars_table(dbname, name)
     cur.close()
-    con.close()
+    # con.close()
     return
 
-def get_envelope(dbname:str, schema:str, pad=0.1):
+def get_envelope(con:pg.extensions.connection, schema:str, pad=0.1):
     """
     Get the envelope for the region. Envelope was previously created
     as a materialized view
     """
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     query = "SELECT * from {0}.bbox;".format(schema)
     cur.execute(query)
     out = cur.fetchall()
     cur.close()
-    con.close()
+    # con.close()
     bbox = out[0][0]
     bbox = bbox.split("((")[-1].split("))")[0]
     bbox = list(map(lambda x: x.split(), bbox.split(",")))
@@ -413,9 +405,9 @@ def get_envelope(dbname:str, schema:str, pad=0.1):
     bbox = [bbox[0]+pad, bbox[1]-pad, bbox[2]-pad, bbox[3]+pad]
     return bbox
 
-def delete_rasters(dbname, schema, table, date=None, where=None):
+def delete_rasters(con, schema, table, date=None, where=None):
     """If date already exists delete associated rasters before ingesting."""
-    con = connect(dbname)
+    # con = connect(dbname)
     cur = con.cursor()
     if (where is None):
         where = "fdate='{0}'".format(date.strftime('%Y-%m-%d'))
@@ -438,9 +430,8 @@ def delete_rasters(dbname, schema, table, date=None, where=None):
         cur.execute(query)
         con.commit()
     cur.close()
-    con.close()
 
-def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str, 
+def tiff_to_db(tiffpath:str, con:pg.extensions.connection, schema:str, table:str, 
                date:datetime=None, ens:int=None, par:str=None):
     """
     Saves tiff to the database.
@@ -449,8 +440,8 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
     ----------
     tiffpath: str
         Path to the tiff file
-    dbname: str
-        Name of the database
+    con: pg.extensions.connection
+        Database connection
     schema: str
         Schema where the raster will be saved
     table: str
@@ -468,15 +459,22 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
         "par argument only applies for static data. You must not define date for static data." 
     if par is not None:
         assert table == "static", "table must be equal to 'static' for static data."
-    con = connect(dbname)
+    # con = connect(dbname)
 
-    temptable = ''.join(random.SystemRandom().choice(string.ascii_letters) for _ in range(8))
-    cmd = f"raster2pgsql -d -s 4326 -t 10x10 {tiffpath} {temptable} | psql -d {dbname}"
+    temptable = ''.join(
+        random.SystemRandom().choice(string.ascii_letters) for _ in range(8)
+    )
+    
+    cur = con.cursor()
+    cur.execute("SELECT current_database()")
+    dbname = cur.fetchall()[0][0]
+    cmd = f"raster2pgsql -d -s 4326 -t 10x10 {tiffpath} {temptable}" + \
+        f"| psql -d {dbname}"
     proc = subprocess.Popen(
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     out, err = proc.communicate()
-    cur = con.cursor()
+    # cur = con.cursor()
     try:
         columns = ["rid", "rast"]
         # TODO: Need to create log
@@ -541,8 +539,8 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
         con.commit()
         cur.close()
     finally:
-        con.close() # Closed in case something failed on the try
-        con = connect(dbname)
+        # con.close() # Closed in case something failed on the try
+        # con = connect(dbname)
         cur = con.cursor()
         query = """
             DROP TABLE {0};
@@ -550,16 +548,14 @@ def tiff_to_db(tiffpath:str, dbname:str, schema:str, table:str,
         cur.execute(query)
         con.commit()
         cur.close()
-        con.close()
+        # con.close()
     return
 
-def verify_static_par_exists(dbname:str, schema:str, parname:str, con=False):
+def verify_static_par_exists(con:pg.extensions.connection, schema:str,
+                             parname:str):
     """It will raise an error if the static parameter already exists"""
-    close_connection = False
-    if not con:
-        con = connect(dbname)
-        close_connection = True
-    if not table_exists(dbname, schema, "static", con):
+
+    if not table_exists(con, schema, "static", con):
         return False
     cur = con.cursor()
     query = """
@@ -568,8 +564,6 @@ def verify_static_par_exists(dbname:str, schema:str, parname:str, con=False):
     cur.execute(query)
     rows = cur.fetchall()
     cur.close()
-    if close_connection:
-        con.close()
     return len(rows) > 0
         
 
@@ -603,6 +597,7 @@ def latest_date(con, schema:str, table:str):
     query = f"SELECT max(fdate) FROM {schema}.{table};"
     cur.execute(query)
     dt = cur.fetchall()[0][0]
+    cur.close()
     return datetime(dt.year, dt.month, dt.day)
     
 
@@ -777,6 +772,7 @@ def fetch_admin1_list(con, schema):
         """.format(schema)
     cur.execute(query)
     rows = cur.fetchall()
+    cur.close()
     return [r[0] for r in rows]
 
 def fetch_baseline_pars(con, schema, admin1):
@@ -799,6 +795,7 @@ def fetch_baseline_pars(con, schema, admin1):
         "nitrogen": float(rows[0][2]), "crps": float(rows[0][3]),
         "rpss": float(rows[0][4])
         }
+    cur.close()
     return pars_dict
 
 def fetch_baseline_run(con, schema, admin1):
@@ -811,6 +808,7 @@ def fetch_baseline_run(con, schema, admin1):
         ;""".format(schema, admin1.replace("'", "''"))
     cur.execute(query)
     rows = cur.fetchall()
+    cur.close()
     assert len(rows) > 0, \
         f"No baseline run available for {admin1} in {schema}.baseline_run"
     return DataFrame(rows, columns=["year", "sim", "obs"])
@@ -825,6 +823,7 @@ def fetch_cultivars(con, schema, admin1):
         ;""".format(schema, admin1.replace("'", "''"))
     cur.execute(query)
     rows = cur.fetchall()
+    cur.close()
     assert len(rows) > 0, \
         f"No baseline run available for {admin1} in {schema}.baseline_run"
     out_df = DataFrame(
