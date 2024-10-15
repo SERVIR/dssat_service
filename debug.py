@@ -14,7 +14,6 @@ from dssatservice.database import (
 from dssatservice.ui.base import (
     admin_list, AdminBase, Session
 )
-from dssatservice.ui.plot import add_anomaly_bar
 from dssatservice.data.transform import parse_overview
 from dssatservice.dssat import run_spatial_dssat
 from datetime import datetime
@@ -122,11 +121,13 @@ def ingest_static_data():
 if __name__ == "__main__":
     # NMME Download
     schema = "zimbabwe"
+    con = pg.connect(dbname=dbname)
     # Get the envelope for that region
     # bbox = get_envelope(dbname, schema)
     # download_nmme("Precipitation", 1, bbox)
     # calculate_climatology(dbname, schema)
     # ingest_nmme_rain(dbname, schema, 1)
+    ingest_nmme_rain(con, schema, 1)
     # ingest_nmme_temp(dbname, schema, 1)
     # ingest_nmme(dbname, schema)
     # run_model_forecast()
