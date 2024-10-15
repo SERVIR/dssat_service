@@ -555,7 +555,7 @@ def verify_static_par_exists(con:pg.extensions.connection, schema:str,
                              parname:str):
     """It will raise an error if the static parameter already exists"""
 
-    if not table_exists(con, schema, "static", con):
+    if not table_exists(con, schema, "static"):
         return False
     cur = con.cursor()
     query = """

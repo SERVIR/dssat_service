@@ -111,8 +111,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     gs = GSRun()        
 
     # Check if TAVG and TAMP are in static table
-    tav_exists = db.verify_static_par_exists(dbname, schema, "tav", con)
-    tamp_exists = db.verify_static_par_exists(dbname, schema, "tamp", con)
+    tav_exists = db.verify_static_par_exists(con, schema, "tav")
+    tamp_exists = db.verify_static_par_exists(con, schema, "tamp")
     
     iter_pixels = list(enumerate(zip(soil_pixels, weather_pixels)))
     for (n, (soil, weather)) in tqdm(iter_pixels):
