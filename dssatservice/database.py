@@ -176,7 +176,7 @@ def _create_soil_table(con, schema):
 
 def _create_cultivars_table(con, schema):
     """Creates soil table"""
-    table = "cultivars"
+    table = "cultivar_options"
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -184,10 +184,8 @@ def _create_cultivars_table(con, schema):
             id serial PRIMARY KEY,
             admin1 text,
             cultivar char(6),
-            yield_category text,
-            season_length int,
-            yield_avg float8,
-            yield_range text
+            maturity_type text,
+            season_length int
         );
         """.format(schema, table)
     cur.execute(query)
@@ -196,7 +194,7 @@ def _create_cultivars_table(con, schema):
         """.format(schema, table)
     cur.execute(query)
     query = """
-        CREATE INDEX {1}_yieldCat ON {0}.{1} (yield_category);
+        CREATE INDEX {1}_matType ON {0}.{1} (maturity_type);
         """.format(schema, table)
     cur.execute(query)
     con.commit()
@@ -816,20 +814,19 @@ def fetch_baseline_run(con, schema, admin1):
 def fetch_cultivars(con, schema, admin1):
     cur = con.cursor()
     query = """
-        SELECT cultivar, yield_category, season_length, yield_range, yield_avg 
-        FROM {0}.cultivars
+        SELECT cultivar, maturity_type, season_length
+        FROM {0}.cultivar_options
         WHERE
-            admin1='{1}'
-        ;""".format(schema, admin1.replace("'", "''"))
-    cur.execute(query)
+            admin1=%s
+        ;""".format(schema)
+    cur.execute(query, (admin1,))
     rows = cur.fetchall()
     cur.close()
     assert len(rows) > 0, \
-        f"No baseline run available for {admin1} in {schema}.baseline_run"
+        f"No Cultivars in {admin1} - {schema}.baseline_run"
     out_df = DataFrame(
         rows, 
-        columns=["cultivar", "yield_category", "season_length", "yield_range",
-                 "yield_avg"]
+        columns=["cultivar", "maturity_type", "season_length"]
     )
     return out_df
     

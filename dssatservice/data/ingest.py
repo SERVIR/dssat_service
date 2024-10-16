@@ -174,28 +174,24 @@ def ingest_cultivars(con:pg.extensions.connection, schema:str, csv:str):
     Ingest cultivar data. The data to ingest must be in a csv with the next
     columns: 
         admin1
-        yield_category: one among High, Medium, Low
+        maturity_type: cultivar maturity type
         season_length: average season lenght
         cultivar: DSSAT cultivar code
-        yield_avg: average potential yield
-        yield_range: string with yield range for that yield category
     """
     # con = db.connect(dbname)
     cur = con.cursor()
     df = pd.read_csv(csv)
     for _, row in df.iterrows():
         query = """
-            INSERT INTO {0}.cultivars(
-                admin1, cultivar, yield_category, season_length, yield_avg,
-                yield_range
+            INSERT INTO {0}.cultivar_options(
+                admin1, cultivar, maturity_type, season_length
                 ) 
-            VALUES ('{1}', '{2}', '{3}', '{4}', '{5}', '{6}');
-            """.format(
-                schema, row.admin1.replace("'", "''"), row.cultivar, 
-                row.yield_category, row.season_length, row.yield_avg, 
-                row.yield_range
-            )
-        cur.execute(query)
+            VALUES (%s, %s, %s, %s);
+            """.format(schema)
+        cur.execute(
+            query, 
+            (row.admin1, row.cultivar, row.maturity_type, int(row.season_length))
+        )
         con.commit()
     cur.close()
         
