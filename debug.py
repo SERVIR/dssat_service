@@ -9,7 +9,7 @@ from dssatservice.database import (
     add_country, _create_soil_table, verify_series_continuity,
     get_era5_for_point, get_soils, connect, _create_cultivars_table,
     fetch_admin1_list, fetch_baseline_pars, get_envelope,
-    _create_climate_forecast_table
+    _create_climate_forecast_table, fetch_cultivars
     )
 from dssatservice.ui.base import (
     admin_list, AdminBase, Session
@@ -117,11 +117,26 @@ def ingest_static_data():
         rast="/home/user/dssat_service/data/weather_data/tav_tamp/tamp_kenya.tif",
         parname="tamp"
     )
+    
+def create_cultivars(con, country, csvfile):
+    _create_cultivars_table(con, country)
+    ingest_cultivars(
+        con, country, csvfile
+    )
 
 if __name__ == "__main__":
     # NMME Download
-    schema = "zimbabwe"
+    schema = "kenya"
     con = pg.connect(dbname=dbname)
+    
+    fetch_cultivars(con, schema, "Nakuru")
+    exit()
+    create_cultivars(
+        con, 
+        schema, 
+        "/home/user/dssat_service/cultivar_selection/Kenya/cultivar_table.csv"
+    )
+    
     # Get the envelope for that region
     # bbox = get_envelope(dbname, schema)
     # download_nmme("Precipitation", 1, bbox)

@@ -57,13 +57,6 @@ class AdminBase:
         self.connection = con
         self.admin1 = admin1 
         self.schema = schema
-        pars = db.fetch_baseline_pars(con, schema, admin1)
-        self.baseline_pars = SimulationPars(
-            nitrogen_dap = (5, 30, 60),
-            nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
-            cultivar = pars["cultivar"],
-            planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
-        )
         baseline_data = db.fetch_baseline_run(con, schema, admin1)
         self.baseline_run = baseline_data.loc[
             baseline_data.year.isin(BASELINE_YEARS)
@@ -72,25 +65,35 @@ class AdminBase:
         self.baseline_stats = self.baseline_quantile_stats()
         self.validation_run =  baseline_data.dropna()
         tmp_df = db.fetch_cultivars(con, schema, admin1)
-        tmp_df["yield_avg"] = (tmp_df.yield_avg/1000).round(1)
-        tmp_df = tmp_df.set_index(["yield_avg", "season_length"])
-        self.cultivars = tmp_df.sort_index()
+        # tmp_df["yield_avg"] = (tmp_df.yield_avg/1000).round(1)
+        tmp_df = tmp_df.set_index(["maturity_type"])
+        self.cultivars = tmp_df.sort_values(by="season_length")
+        # TODO: This will be replaced with a model performance stats
+        pars = db.fetch_baseline_pars(con, schema, admin1)
+        self.baseline_pars = SimulationPars(
+            nitrogen_dap = (5, 30, 60),
+            nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
+            # cultivar = pars["cultivar"],
+            cultivar =  self.cultivars.loc["Medium", "cultivar"],
+            planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
+        )
         
-        self.cultivar_labels = dict(zip(
-            self.cultivars.cultivar,
-            self.cultivars.index.map(
-                # lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
-                lambda x: f"{CULTIVAR_NAMES[self.cultivars.loc[x, 'cultivar']]} ({x[1]} days)"
+        # self.cultivar_labels = dict(zip(
+        #     self.cultivars.cultivar,
+        #     self.cultivars.index.map(
+        #         # lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
+        #         lambda x: f"{CULTIVAR_NAMES[self.cultivars.loc[x, 'cultivar']]} ({x[1]} days)"
                 
-            ),
-        ))
-        self.cultivar_labels_inv = {v: k for k, v in self.cultivar_labels.items()}
+        #     ),
+        # ))
+        # self.cultivar_labels_inv = {v: k for k, v in self.cultivar_labels.items()}
         
         
     def baseline_description(self):
         """
         Returns a string that describes the current baseline scenario.
         """
+        return ""
         cultivar = self.baseline_pars.cultivar
         plantingdate = self.baseline_pars.planting_date
         nitro = sum(self.baseline_pars.nitrogen_rate)
