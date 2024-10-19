@@ -659,7 +659,7 @@ def get_columnRange_series_data(session, series_len):
     tmp_df = session.adminBase.cultivars
     cul = tmp_df.loc[tmp_df.cultivar == session.simPars.cultivar].index[0]
     label = '<span style="font-size: 12px; font-weight: bold">' + \
-            f"{cul}<br>" + \
+            f"{cul} season<br>" + \
             f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
             f"Harvest on {harvest_range}<br>" + \
             f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events" + \

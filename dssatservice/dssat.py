@@ -15,20 +15,22 @@ import os
 import shutil
 from tqdm import tqdm
 import logging
+import psycopg2 as pg
 
 # For SRAD estimation when using NMME data
 from sklearn.neighbors import KNeighborsRegressor
 
 
 MIN_SAMPLES = 4
-MAX_SIM_LENGTH = 8*30 # This is maximum simulation lenght since planting. 
+# MAX_SIM_LENGTH = 8*30  
+MAX_SIM_LENGTH = 360 # This is maximum simulation lenght since planting.
 logger = logging.getLogger(__name__)
 
-def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
+def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
                       all_random:bool=True, overview:bool=False,
-                      return_input=False, con=False,
+                      return_input=False,
                       **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
@@ -36,8 +38,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
 
     Arguments
     ----------
-    dbname: str
-        Name of the database
+    con: pg.extensions.connection
+        pg connection
     schema: str
         Name of the schema (country)
     admin1: str
@@ -71,13 +73,26 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     # start_date = plantingdate
     start_date = plantingdate - timedelta(days=30)
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
-    close_connection = False
-    if not con:
-        con = db.connect(dbname)
-        close_connection = True
     db.check_admin1_in_country(con, schema, admin1)
     # Get soils and verify a minimum number of pixel samples
     soils = db.get_soils(con, schema, admin1, 1)
+    # Get weather pixels
+    query = """
+        WITH pts As ( 
+        SELECT (ST_PixelAsCentroids(ST_Clip(wt.rast, ad.geom))).geom as geom
+        FROM {0}.era5_rain as wt, {0}.admin as ad
+        WHERE 
+            fdate=%s
+        AND ad.admin1=%s
+        )  
+        SELECT ST_X(geom), ST_Y(geom) FROM pts;
+        """.format(schema)
+    cur = con.cursor()
+    cur.execute(query, (start_date, admin1,))
+    rows = cur.fetchall()
+    cur.close()
+    all_pixels_weather = pd.Series([(i[0], i[1]) for i in rows])
+    
     if len(soils) < MIN_SAMPLES:
        soils = db.get_soils(con, schema, admin1, 2)
        if len(soils) < MIN_SAMPLES:
@@ -85,20 +100,20 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
           assert len(soils) > MIN_SAMPLES, \
             f"Region is not large enough to have at least {MIN_SAMPLES} samples"
 
-    pixels = soils.apply(lambda row: (row.lon, row.lat), axis=1)
-    n_pixels = len(pixels)
+    all_pixels_soil = soils.apply(lambda row: (row.lon, row.lat), axis=1)
+    n_pixels = min(len(all_pixels_soil), len(all_pixels_weather))
     if all_random:
         # In case all pixel combinations are posible
         if n_pixels < np.sqrt(nens):
-            pix_prod = list(product(pixels, pixels))
+            pix_prod = list(product(all_pixels_soil, all_pixels_weather))
             soil_pixels = [p[0] for p in pix_prod]
             weather_pixels = [p[1] for p in pix_prod]
         else:
-            soil_pixels = pixels.sample(nens, replace=n_pixels<nens)
-            weather_pixels = pixels.sample(nens, replace=n_pixels<nens)
+            soil_pixels = all_pixels_soil.sample(nens, replace=n_pixels<nens)
+            weather_pixels = all_pixels_weather.sample(nens, replace=n_pixels<nens)
     else:
         nens = min(nens, n_pixels)
-        soil_pixels = weather_pixels = pixels.sample(nens, replace=False)
+        soil_pixels = weather_pixels = soil_pixels.sample(nens, replace=False)
 
     # tmpdir to save wth files
     if return_input:
@@ -192,10 +207,9 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
 
         dssat_weather.write(tmp_dir_name)
 
-        # Planting assuming emergence 5 days after planting
+        # Planting 
         planting = {
             "PDATE": plantingdate, 
-            # "EDATE": plantingdate + timedelta(days=5),
             "PLDP": 5
         }
         if return_input:
@@ -214,24 +228,23 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     if return_input:
         return input_files
     # Run DSSAT
-    if close_connection:
-        con.close()
     # Set automatic management
-    planting_window_start = plantingdate - timedelta(days=15)
-    planting_window_end = plantingdate + timedelta(days=15)
-    sim_controls = {
-        "PLANT": "F", # Automatic, force in last day of window
-        "PFRST": planting_window_start.strftime("%y%j"),
-        "PLAST": planting_window_end.strftime("%y%j"),
-        "PH2OL": 50, "PH2OU": 100, "PH2OD": 20, 
-        "PSTMX": 40, "PSTMN": 10
-    }
+    # planting_window_start = plantingdate - timedelta(days=15)
+    # planting_window_end = plantingdate + timedelta(days=15)
+    # sim_controls = {
+    #     "PLANT": "F", # Automatic, force in last day of window
+    #     "PFRST": planting_window_start.strftime("%y%j"),
+    #     "PLAST": planting_window_end.strftime("%y%j"),
+    #     "PH2OL": 50, "PH2OU": 100, "PH2OD": 20, 
+    #     "PSTMX": 40, "PSTMN": 10
+    # }
     # Get run kwargs if defined
+    sim_controls = {}
     start_date = kwargs.get("start_date", start_date)
     sim_controls = kwargs.get("sim_controls", sim_controls)
     out = gs.run(
         start_date=start_date,
-        sim_controls=sim_controls
+        # sim_controls=sim_controls
     )
     tmp_dir.cleanup()
     if (out.MAT == "-99").mean() > .5:
