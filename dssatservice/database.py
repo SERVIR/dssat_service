@@ -739,7 +739,10 @@ def get_static_par(con, schema:str, lon:float, lat:float, par:str):
     cur.execute(query)
     rows = np.array(cur.fetchall())
     cur.close()
-    return rows[0][0]
+    if len(rows) < 1:
+        return None 
+    else:
+        return rows[0][0]
     
 def check_admin1_in_country(con, schema, admin1):
     cur = con.cursor()

@@ -53,7 +53,7 @@ def ingest_era5_record(con:pg.extensions.connection, schema:str, date:datetime):
                 f"\nERA5 INGEST: {date.date()} {ncvar} for {schema} ingested\n"
             )
         except Exception as e:
-            if "Your request has not produced a valid" in str(e):
+            if "Request has not produced a valid combination" in str(e):
                 logger.info(
                     f"\nERA5 INGEST: {date.date()} {ncvar} for {schema} failed. " +\
                     "There is no data matching the request.\n"
@@ -258,7 +258,7 @@ def ingest_nmme_rain(con:pg.extensions.connection, schema:str, ens:int):
     if not db.table_exists(con, schema, f"nmme_rain"):
          db._create_climate_forecast_table(con, schema, f"nmme_rain")
 
-    bbox = db.get_envelope(con, schema)
+    bbox = db.get_envelope(con, schema, pad=1.)
     
     # Get the reference geotransform raster from the climatology raster
     where = f"\"month\"=1 AND variable=\\'tmean_mean\\'"
@@ -303,7 +303,7 @@ def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
         if not db.table_exists(con, schema, f"nmme_{var}"):
             db._create_climate_forecast_table(con, schema, f"nmme_{var}")
 
-    bbox = db.get_envelope(con, schema)
+    bbox = db.get_envelope(con, schema, pad=1.)
     
     # Get the reference geotransform raster from the climatology raster
     where = f"\"month\"=1 AND variable=\\'tmean_mean\\'"
