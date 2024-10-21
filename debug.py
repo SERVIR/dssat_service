@@ -9,7 +9,8 @@ from dssatservice.database import (
     add_country, _create_soil_table, verify_series_continuity,
     get_era5_for_point, get_soils, connect, _create_cultivars_table,
     fetch_admin1_list, fetch_baseline_pars, get_envelope,
-    _create_climate_forecast_table, fetch_cultivars
+    _create_climate_forecast_table, fetch_cultivars, add_latest_forecast,
+    dataframe_to_table, fetch_forecast_tables
     )
 from dssatservice.ui.base import (
     admin_list, AdminBase, Session
@@ -124,18 +125,51 @@ def create_cultivars(con, country, csvfile):
         con, country, csvfile
     )
 
+
+
 if __name__ == "__main__":
     # NMME Download
     schema = "kenya"
     con = pg.connect(dbname=dbname)
     
-    fetch_cultivars(con, schema, "Nakuru")
+    fetch_forecast_tables(con, schema, "Bomet")
+    # This piece of code is to upload the latest forecast tables to the db
+    # Forecast map
+    # file = "/home/user/dssat_service/forecast_data/Kenya/latest_forecast.geojson"
+    # add_latest_forecast(con, schema, file)
+    # All simulations results
     exit()
-    create_cultivars(
-        con, 
-        schema, 
-        "/home/user/dssat_service/cultivar_selection/Kenya/cultivar_table.csv"
+    import pandas as pd
+    results_df = pd.read_csv(
+        "/home/user/dssat_service/forecast_data/Kenya/forecast_241021.csv"
     )
+    dataframe_to_table(
+        f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
+        results_df,
+        "kenya",
+        "latest_forecast_results",
+        "admin1"
+    )
+    # Overview file info
+    overview_df = pd.read_csv(
+        "/home/user/dssat_service/forecast_data/Kenya/forecast_overview_241021.csv"
+    )
+    dataframe_to_table(
+        f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
+        overview_df,
+        "kenya",
+        "latest_forecast_overview",
+        "admin1"
+    )
+    exit()
+    
+    # fetch_cultivars(con, schema, "Nakuru")
+    # exit()
+    # create_cultivars(
+    #     con, 
+    #     schema, 
+    #     "/home/user/dssat_service/cultivar_selection/Kenya/cultivar_table.csv"
+    # )
     
     # Get the envelope for that region
     # bbox = get_envelope(dbname, schema)

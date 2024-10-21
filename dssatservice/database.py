@@ -2,6 +2,7 @@
 All the database operations are included here. 
 """
 import psycopg2 as pg
+from sqlalchemy import create_engine
 import geopandas as gpd
 from pandas import date_range, Series, DataFrame
 import numpy as np
@@ -833,3 +834,70 @@ def fetch_cultivars(con, schema, admin1):
     )
     return out_df
     
+def add_latest_forecast(con:pg.extensions.connection, schema:str, geojson:str):
+    """
+    Add the latest forecast to the DB. The geojson/shp must contain the next 
+    columns: admin1, pred_cat, pred, obs_avg, planting_p, ref_period, nitro_rate,
+    urea_rate
+    """
+    gdf = gpd.read_file(geojson)
+    gdf["geometry"] = gdf.geometry.simplify(0.001)
+
+    tmp_dir = tempfile.TemporaryDirectory()
+    tmp_shp = os.path.join(tmp_dir.name, "file.shp")
+    gdf.to_file(tmp_shp, crs=4326)
+
+    if table_exists(con, schema, "latest_forecast"):
+        warnings.warn(f"{schema}.latest_forecast exists, it will be overwriten")
+    cur = con.cursor()
+    cur.execute("SELECT current_database()")
+    dbname = cur.fetchall()[0][0]
+    cmd = f"shp2pgsql -d -s 4326 {tmp_shp} {schema}.latest_forecast | psql -d {dbname}" 
+    proc = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, 
+        stderr=subprocess.STDOUT
+    )
+    out, err = proc.communicate()
+    tmp_dir.cleanup()
+    return
+
+def dataframe_to_table(connectionstr, df, schema, table, index_label):
+    engine = create_engine(connectionstr)
+    df = df.set_index(index_label)
+    df.to_sql(
+        name=table, schema=schema, con=engine, 
+        if_exists="replace", index=True, index_label=index_label
+    )
+    
+def fetch_forecast_tables(con, schema, admin1):
+    cur = con.cursor()
+    # Get forecast results
+    query = """
+        SELECT * FROM {0}.latest_forecast_results
+        WHERE admin1=%s 
+        """.format(schema)
+    cur.execute(query, (admin1, ))
+    rows = cur.fetchall()
+    query_cols = """
+        SELECT *
+        FROM information_schema.columns
+        WHERE table_schema=%s
+        AND table_name=%s;
+    """
+    cur.execute(query_cols, (schema, 'latest_forecast_results'))
+    cols = cur.fetchall()
+    cols = [c[3] for c in cols]
+    results_df = DataFrame(rows, columns=cols)
+    
+    # Get overview
+    query = """
+        SELECT * FROM {0}.latest_forecast_overview
+        WHERE admin1=%s 
+        """.format(schema)
+    cur.execute(query, (admin1, ))
+    rows = cur.fetchall()
+    cur.execute(query_cols, (schema, 'latest_forecast_overview'))
+    cols = cur.fetchall()
+    cols = [c[3] for c in cols]
+    overview_df = DataFrame(rows, columns=cols)
+    return results_df, overview_df
