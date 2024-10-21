@@ -57,37 +57,29 @@ class AdminBase:
         self.connection = con
         self.admin1 = admin1 
         self.schema = schema
-        baseline_data = db.fetch_baseline_run(con, schema, admin1)
-        self.baseline_run = baseline_data.loc[
-            baseline_data.year.isin(BASELINE_YEARS)
-        ]
+        # baseline_data = db.fetch_baseline_run(con, schema, admin1)
+        # self.baseline_run = baseline_data.loc[
+        #     baseline_data.year.isin(BASELINE_YEARS)
+        # ]
 
-        self.baseline_stats = self.baseline_quantile_stats()
-        self.validation_run =  baseline_data.dropna()
+        # self.baseline_stats = self.baseline_quantile_stats()
+        # self.validation_run =  baseline_data.dropna()
+        
+        self.forecast_results, self.forecast_overview = db.fetch_forecast_tables(
+            con, schema, admin1
+        )
         tmp_df = db.fetch_cultivars(con, schema, admin1)
-        # tmp_df["yield_avg"] = (tmp_df.yield_avg/1000).round(1)
         tmp_df = tmp_df.set_index(["maturity_type"])
         self.cultivars = tmp_df.sort_values(by="season_length")
         # TODO: This will be replaced with a model performance stats
-        pars = db.fetch_baseline_pars(con, schema, admin1)
-        self.baseline_pars = SimulationPars(
-            nitrogen_dap = (5, 30, 60),
-            nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
-            # cultivar = pars["cultivar"],
-            cultivar =  self.cultivars.loc["Medium", "cultivar"],
-            planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
-        )
-        
-        # self.cultivar_labels = dict(zip(
-        #     self.cultivars.cultivar,
-        #     self.cultivars.index.map(
-        #         # lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
-        #         lambda x: f"{CULTIVAR_NAMES[self.cultivars.loc[x, 'cultivar']]} ({x[1]} days)"
-                
-        #     ),
-        # ))
-        # self.cultivar_labels_inv = {v: k for k, v in self.cultivar_labels.items()}
-        
+        # pars = db.fetch_baseline_pars(con, schema, admin1)
+        # self.baseline_pars = SimulationPars(
+        #     nitrogen_dap = (5, 30, 60),
+        #     nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
+        #     # cultivar = pars["cultivar"],
+        #     cultivar =  self.cultivars.loc["Medium", "cultivar"],
+        #     planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
+        # )
         
     def baseline_description(self):
         """
@@ -151,7 +143,13 @@ class Session:
         baseline
         """
         self.adminBase = adminBase
-        self.simPars = self.adminBase.baseline_pars
+        # self.simPars = self.adminBase.baseline_pars
+        self.simPars = SimulationPars(
+            nitrogen_dap = (0,),
+            nitrogen_rate = (0,),
+            cultivar =  self.adminBase.cultivars.loc["Medium", "cultivar"],
+            planting_date = datetime(2024, 1, 1)
+        )
         self.experiment_results = pd.DataFrame(
             [], 
             columns=[
