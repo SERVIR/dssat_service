@@ -40,6 +40,13 @@ DEV_STAGES_LABELS = [
     "Emerg.-End<br>Juv.", "End Juv-<br>Flor Init", "Flor Init-<br>End Lf Gro",
     "End lf Gro-<br>Beg Grain<br>Fil", "Grain<br>Fill"
 ]
+DEV_STAGES_FULL_LABELS = [
+    "Emergence to end<br>of Juvenile stage", 
+    "End of juvenile<br>to floral initiation",
+    "Floral initiation to<br>end of leaf growth", 
+    "End of leaf grow to<br>begin of grain filling",
+    "Grain filling"
+]
 STRESS_COLUMNS = {
     "water": "watStress",
     "nitrogen":  "nitroStress"
@@ -558,7 +565,7 @@ def init_columnRange_chart(session):
         },
         "plot_lines": [
             {
-                "value": session.adminBase.validation_run.obs.mean(),
+                "value": (session.adminBase.historical_data.value/1000).mean(),
                 "color": "#32323232",
                 "width": 8,
                 "dash_style": "Solid",
@@ -570,7 +577,7 @@ def init_columnRange_chart(session):
                 }
             },
             {
-                "value": session.adminBase.validation_run.obs.min(),
+                "value": (session.adminBase.historical_data.value/1000).min(),
                 "color": "#32323232",
                 "width": 3,
                 "dash_style": "Dash",
@@ -582,7 +589,7 @@ def init_columnRange_chart(session):
                 }
             },
             {
-                "value": session.adminBase.validation_run.obs.max(),
+                "value": (session.adminBase.historical_data.value/1000).max(),
                 "color": "#32323232",
                 "width": 3,
                 "dash_style": "Dash",
@@ -691,3 +698,163 @@ def get_columnRange_series_data(session, series_len):
         "pointFormat": '<span style="font-size: 12px">{point.custom.extraInformation}</span><br/>'
     }
     return column
+
+
+def current_forecast_yield_plot(session):
+    my_chart = Chart()
+    my_chart.options = HighchartsOptions()
+    my_chart.options.title = {
+        'text': 'DSSAT simulated maize yield', 
+        "style": {
+            "font-size": "15px"
+        }
+    }
+    my_chart.options.y_axis = {
+        "title": {
+            'text': 'Yield (t/ha)', 
+            "style": {
+                "font-size": "15px",
+            }
+        },
+        "labels": {
+            "style": {
+                "font-size": "15px",
+            }
+        },
+    }
+    my_chart.options.x_axis = {
+        "title": {
+            'text': '', 
+            "style": {
+                "font-size": "0px",
+            }
+        },
+        "labels": {
+            "style": {
+                "font-size": "0px",
+            }
+        },
+        "type": "Category",
+
+    }
+    my_chart = my_chart.to_dict()
+    my_chart["userOptions"]["series"] = []
+    
+    tmp_df = session.adminBase.forecast_results
+    tmp_df = tmp_df.loc[tmp_df.MAT != -99]
+    tmp_df["HARWT"] = tmp_df.HARWT/1000
+    
+    counts, bins = np.histogram(tmp_df.HARWT, bins=5)
+    counts = counts/sum(counts)
+
+    column = ColumnRangeSeries().from_dict({
+        "data":[
+            {
+                'high': round(bins[n+1], 2), 'low': round(bins[n], 2), 
+                "x": 0,
+                "color": to_hex(colormaps["Greens"](count/.35)),
+                "count": count, 
+                "custom": {
+                    "extraInformation": f'<b>{session.adminBase.admin1}</b><br>' +\
+                        f'{bins[n]:.2f}-{bins[n+1]:.2f} t/ha<br>' + \
+                        f'({100*count/sum(counts):.0f}% probability)',
+                }
+            }
+            for n, count in enumerate(counts)
+        ],
+        "borderWidth": 0,
+        "showInLegend": False,
+        "pointInterval": 1,
+    })
+    scatter = ScatterSeries().from_dict({
+        "data": [
+            {"x": 0, "y": tmp_df.HARWT.mean().round(2)}
+        ],
+        "showInLegend": False,
+        "color": "#FFFFFF",
+        "marker": {
+            "symbol": "square", "radius": 6, "line_color":"#000000",
+            "line_width": 2, 
+        },
+        "tooltip": {
+            "header_format": '<span style="font-size: 12px; font-weight: bold">Siimulation average</span><br/>',
+            "point_format": '<span style="font-size: 12px"> {point.y} t/ha</span><br/>'
+        }
+    })
+    
+    column.grouping = False
+    column.tooltip = {
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.extra}</span><br/>',
+        "pointFormat": '<span style="font-size: 12px">{point.custom.extraInformation}</span><br/>'
+    }
+    my_chart["userOptions"]["series"] = [column.to_dict(), scatter.to_dict()]
+    return my_chart
+
+def current_forecast_stress_plot(session):
+    my_chart = Chart()
+    my_chart.options = HighchartsOptions()
+    my_chart.options.title = {
+        'text': f'Stress indexes', 
+        "style": {
+            "font-size": "15px"
+        }
+    }
+    my_chart.options.y_axis = {
+        "title": {
+            'text': f'Stress (%)', 
+            "style": {
+                "font-size": "15px"
+            }
+        },
+        "labels": {
+            "style": {
+                "font-size": "15px",
+            }
+        },
+        "max": 100
+    }
+    my_chart.options.x_axis = {
+        "title": {
+            'text': 'Crop Development Stage', 
+            "style": {
+                "font-size": "15px",
+            }
+        },
+        "labels": {
+            "style": {
+                "font-size": "15px",
+            },
+            "auto_rotation_limit": 0,
+            "allow_overlap": True
+        },
+        "categories": DEV_STAGES_LABELS,
+    }    
+    my_chart.options.tooltip = {
+        "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
+        "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
+            '<span style="font-size: 12px">{series.name}: {point.y:.0f} %</span><br/>' 
+    }  
+    my_chart = my_chart.to_dict()
+
+    tmp_df = session.adminBase.forecast_overview
+    tmp_df["watStress"] = tmp_df[["stressWatPho", "stressWatGro"]].sum(axis=1)
+    data = session.adminBase.forecast_overview.groupby("devPhase")["watStress"].mean()
+    data = 100*data
+    box = ColumnSeries().from_dict({
+        "data": [data.to_dict().get(dev_st) for dev_st in DEV_STAGES],
+        "name": "Water Stress",
+        "color": "blue",
+})
+
+    my_chart["userOptions"]["series"] = [box.to_dict()] 
+    
+    tmp_df["nitStress"] = tmp_df[["stressNitPhto", "stressNitGro"]].sum(axis=1)
+    data = session.adminBase.forecast_overview.groupby("devPhase")["nitStress"].mean()
+    data = 100*data
+    box = ColumnSeries().from_dict({
+        "data": [data.to_dict().get(dev_st) for dev_st in DEV_STAGES],
+        "name": "Nitrogen Stress",
+        "color": "brown"
+    })
+    my_chart["userOptions"]["series"].append(box.to_dict())
+    return my_chart

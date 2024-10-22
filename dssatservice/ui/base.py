@@ -68,6 +68,7 @@ class AdminBase:
         self.forecast_results, self.forecast_overview = db.fetch_forecast_tables(
             con, schema, admin1
         )
+        self.historical_data = db.fetch_historical_data(con, schema, admin1)
         tmp_df = db.fetch_cultivars(con, schema, admin1)
         tmp_df = tmp_df.set_index(["maturity_type"])
         self.cultivars = tmp_df.sort_values(by="season_length")

@@ -131,7 +131,18 @@ if __name__ == "__main__":
     # NMME Download
     schema = "kenya"
     con = pg.connect(dbname=dbname)
-    
+    import pandas as pd
+    observed_df = pd.read_csv(
+        f"/home/user/dssat_service/forecast_data/Kenya/obs_data.csv"
+    )
+    dataframe_to_table(
+        f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
+        observed_df,
+        "kenya",
+        "historical_data",
+        "admin1"
+    )
+    exit()
     fetch_forecast_tables(con, schema, "Bomet")
     # This piece of code is to upload the latest forecast tables to the db
     # Forecast map
@@ -139,7 +150,6 @@ if __name__ == "__main__":
     # add_latest_forecast(con, schema, file)
     # All simulations results
     exit()
-    import pandas as pd
     results_df = pd.read_csv(
         "/home/user/dssat_service/forecast_data/Kenya/forecast_241021.csv"
     )
