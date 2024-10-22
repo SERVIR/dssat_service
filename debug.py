@@ -131,10 +131,13 @@ if __name__ == "__main__":
     # NMME Download
     schema = "kenya"
     con = pg.connect(dbname=dbname)
+    # Ingest observed data
     import pandas as pd
     observed_df = pd.read_csv(
         f"/home/dquintero/dssat_service/forecast_data/Kenya/obs_data.csv"
     )
+    observed_df = observed_df.rename(columns={"admin_1": "admin1"})
+    observed_df["value"] *= 1000
     dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:eQY3_Fwd@localhost:{con.info.port}/{con.info.dbname}",
         observed_df,

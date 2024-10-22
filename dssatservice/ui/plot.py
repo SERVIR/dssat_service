@@ -782,12 +782,51 @@ def current_forecast_yield_plot(session):
         }
     })
     
+    min_value = session.adminBase.historical_data.value.min()/1000
+    min_year = session.adminBase.historical_data.set_index("year").value.idxmin()
+    min_point = ScatterSeries().from_dict({
+        "data": [
+            {"x": 0, "y": round(min_value, 2)}
+        ],
+        "showInLegend": False,
+        "color": "#000000",
+        "marker": {
+            "symbol": "triangle", "radius": 6, "line_color":"#000000",
+            "line_width": 0, 
+        },
+        "tooltip": {
+            "header_format": f'<span style="font-size: 12px; font-weight: bold">Reference period minimum ({min_year})</span><br>',
+            "point_format": '<span style="font-size: 12px"> {point.y} t/ha</span><br/>'
+        }
+    })
+    
+    max_value = session.adminBase.historical_data.value.max()/1000
+    max_year = session.adminBase.historical_data.set_index("year").value.idxmax()
+    max_point = ScatterSeries().from_dict({
+        "data": [
+            {"x": 0, "y": round(max_value, 2)}
+        ],
+        "showInLegend": False,
+        "color": "#000000",
+        "marker": {
+            "symbol": "triangle-down", "radius": 6, "line_color":"#000000",
+            "line_width": 0, 
+        },
+        "tooltip": {
+            "header_format": f'<span style="font-size: 12px; font-weight: bold">Reference period maximum ({max_year})</span><br>',
+            "point_format": '<span style="font-size: 12px"> {point.y} t/ha</span><br/>'
+        }
+    })
+    
     column.grouping = False
     column.tooltip = {
         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.extra}</span><br/>',
         "pointFormat": '<span style="font-size: 12px">{point.custom.extraInformation}</span><br/>'
     }
-    my_chart["userOptions"]["series"] = [column.to_dict(), scatter.to_dict()]
+    my_chart["userOptions"]["series"] = [
+        column.to_dict(), scatter.to_dict(), min_point.to_dict(),
+        max_point.to_dict()
+    ]
     return my_chart
 
 def current_forecast_stress_plot(session):
