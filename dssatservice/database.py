@@ -901,3 +901,24 @@ def fetch_forecast_tables(con, schema, admin1):
     cols = [c[3] for c in cols]
     overview_df = DataFrame(rows, columns=cols)
     return results_df, overview_df
+
+def fetch_historical_data(con, schema, admin1):
+    cur = con.cursor()
+    # Get forecast results
+    query = """
+        SELECT * FROM {0}.historical_data
+        WHERE admin1=%s 
+        """.format(schema)
+    cur.execute(query, (admin1, ))
+    rows = cur.fetchall()
+    query_cols = """
+        SELECT *
+        FROM information_schema.columns
+        WHERE table_schema=%s
+        AND table_name=%s;
+    """
+    cur.execute(query_cols, (schema, 'historical_data'))
+    cols = cur.fetchall()
+    cols = [c[3] for c in cols]
+    df = DataFrame(rows, columns=cols)
+    return df
