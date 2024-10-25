@@ -673,7 +673,7 @@ def get_columnRange_series_data(session, series_len):
     if session.simPars.irrigation:
         label += f"Irrigated</span><br>Harvest on {harvest_range}"
         avg_irr = int(session.latest_run.TIRR.astype(int).mean())
-        label += f"<br>On average, {avg_irr} mm of irrigation needed"
+        label += f"<br>An average of {avg_irr} mm of irrigation needed"
     else: 
         label += f"Rainfed</span><br>Harvest on {harvest_range}"
         
