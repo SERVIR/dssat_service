@@ -244,7 +244,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
     sim_controls = kwargs.get("sim_controls", sim_controls)
     out = gs.run(
         start_date=start_date,
-        # sim_controls=sim_controls
+        sim_controls=sim_controls
     )
     tmp_dir.cleanup()
     if (out.MAT == "-99").mean() > .5:
