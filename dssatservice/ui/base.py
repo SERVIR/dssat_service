@@ -191,7 +191,8 @@ class Session:
         if fakerun: # To test plots when the model is not locally set up
             self.latest_run = pd.DataFrame({
                 "HARWT": (np.random.normal(0, 1, 50)*100) + 500,
-                "MAT": np.random.uniform(100, 180, 50)
+                "MAT": np.random.uniform(100, 180, 50),
+                "TIRR": np.random.uniform(0, 200, 50)
             })
             self.latest_overview = [f"{i}\n" for i in FAKE_OVERVIEW.split("\n")]
             self.add_experiment_results()
