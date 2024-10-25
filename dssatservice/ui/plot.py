@@ -669,9 +669,14 @@ def get_columnRange_series_data(session, series_len):
             f"{cul} season<br>" + \
             f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
             f"Harvest on {harvest_range}<br>" + \
-            f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events" + \
-            "</span> <br>"    + \
-            f"Harvest on {harvest_range}"
+            f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events<br>"
+    if session.simPars.irrigation:
+        label += f"Irrigated</span><br>Harvest on {harvest_range}"
+        avg_irr = int(session.latest_run.TIRR.astype(int).mean())
+        label += f"<br>On average, {avg_irr} mm of irrigation needed"
+    else: 
+        label += f"Rainfed</span><br>Harvest on {harvest_range}"
+        
     column = ColumnRangeSeries().from_dict({
         "data":[
             {

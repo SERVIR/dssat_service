@@ -42,6 +42,7 @@ class SimulationPars:
     nitrogen_rate: list
     cultivar: str
     planting_date: datetime
+    irrigation: bool
 
 class AdminBase:
     """
@@ -149,7 +150,8 @@ class Session:
             nitrogen_dap = (0,),
             nitrogen_rate = (0,),
             cultivar =  self.adminBase.cultivars.loc["Medium", "cultivar"],
-            planting_date = datetime(2024, 1, 1)
+            planting_date = datetime(2024, 1, 1),
+            irrigation = False
         )
         self.experiment_results = pd.DataFrame(
             [], 
@@ -207,14 +209,21 @@ class Session:
                 self.simPars.planting_date.month, 
                 self.simPars.planting_date.day
             )
-        TIMEDELTA_WINDOW = 1
-        planting_window_start = plantingdate - timedelta(days=TIMEDELTA_WINDOW)
-        planting_window_end = plantingdate + timedelta(days=TIMEDELTA_WINDOW)
-        sim_controls = {
-            "PLANT": "F", # Automatic, force in last day of window
-            "PFRST": planting_window_start.strftime("%y%j"),
-            "PLAST": planting_window_end.strftime("%y%j"),
-        }
+        sim_controls = {}
+        # TIMEDELTA_WINDOW = 1
+        # planting_window_start = plantingdate - timedelta(days=TIMEDELTA_WINDOW)
+        # planting_window_end = plantingdate + timedelta(days=TIMEDELTA_WINDOW)
+        # sim_controls = {
+        #     "PLANT": "F", # Automatic, force in last day of window
+        #     "PFRST": planting_window_start.strftime("%y%j"),
+        #     "PLAST": planting_window_end.strftime("%y%j"),
+        # }
+        if self.simPars.irrigation:
+            sim_controls["IRRIG"] = "A"
+            sim_controls["IMDEP"] = 30
+            sim_controls["ITHRL"] = 50
+            sim_controls["ITHRU"] = 100
+            
         df, overview = run_spatial_dssat(
             dbname="", 
             con=self.adminBase.connection,
