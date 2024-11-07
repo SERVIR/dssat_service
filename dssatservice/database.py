@@ -932,4 +932,4 @@ def fetch_observed_reference(con, schema, admin1):
         """.format(schema)
     cur.execute(query, (admin1, ))
     rows = cur.fetchall()
-    return tuple(map(int, rows[0]))
+    return tuple(map(np.float32, rows[0]))
