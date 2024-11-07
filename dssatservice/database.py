@@ -922,3 +922,14 @@ def fetch_historical_data(con, schema, admin1):
     cols = [c[3] for c in cols]
     df = DataFrame(rows, columns=cols)
     return df
+
+def fetch_observed_reference(con, schema, admin1):
+    cur = con.cursor()
+    # Get forecast results
+    query = """
+        SELECT obs_min, obs_avg, obs_max FROM {0}.latest_forecast
+        WHERE admin1=%s 
+        """.format(schema)
+    cur.execute(query, (admin1, ))
+    rows = cur.fetchall()
+    return tuple(map(int, rows[0]))

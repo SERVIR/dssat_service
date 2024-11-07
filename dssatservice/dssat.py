@@ -26,6 +26,18 @@ MIN_SAMPLES = 4
 MAX_SIM_LENGTH = 360 # This is maximum simulation lenght since planting.
 logger = logging.getLogger(__name__)
 
+HARM_VARS = ["constant", "cos1", "sin1", "cos2", "sin2"]
+def add_harmonic_coefs(tmp_df):
+    tmp_df["t"] = np.array([
+        int(i.strftime('%j')) 
+        for i in tmp_df.index
+    ])/365
+    tmp_df["constant"] = 1
+    tmp_df["cos1"] = np.cos(2*np.pi*tmp_df["t"])
+    tmp_df["sin1"] = np.sin(2*np.pi*tmp_df["t"])
+    tmp_df["cos2"] = np.cos(np.pi*tmp_df["t"])
+    tmp_df["sin2"] = np.sin(np.pi*tmp_df["t"])
+
 def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
@@ -158,19 +170,62 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
                 con, schema, weather[0], weather[1], 
                 latest_past_weather, end_date, ens
             )            
-            # Estimate future srad using KNN
+            # Estimate forecast srad
+            # Adjust a harmonic model to past srad
+            add_harmonic_coefs(past_weather_df)          
+            past_weather_df["srad_rolling"] = \
+                past_weather_df.srad.rolling(10).mean()
+            A = past_weather_df.dropna()[HARM_VARS].to_numpy()
+            b = past_weather_df.dropna()["srad_rolling"].to_numpy()
+            coefs, _, _, _ = np.linalg.lstsq(A, b)
+            # Estimate the srad difference when compared to harmonic
+            past_weather_df["srad_harm"] = (
+                past_weather_df[HARM_VARS].to_numpy() @ coefs
+            ).flatten()
+            past_weather_df["srad_dif"] = \
+                past_weather_df.srad - past_weather_df.srad_harm
+            
+            # Adjust a KNN regressor to srad_diff using cos1 and rain
             knn_reg = KNeighborsRegressor()
-            x = past_weather_df[["tmax", "tmin", "rain"]].to_numpy()
-            y = past_weather_df["srad"].to_numpy()
-            knn_reg.fit(x, y)
-            future_weather_df["srad"] = knn_reg.predict(
-                future_weather_df[["tmax", "tmin", "rain"]].to_numpy()
+            x = past_weather_df[["cos1", "rain"]].to_numpy()
+            y = past_weather_df.srad_dif.to_numpy()
+            knn_reg = knn_reg.fit(x, y)
+            add_harmonic_coefs(future_weather_df)
+            future_weather_df["srad_harm"] = (
+                future_weather_df[HARM_VARS].to_numpy() @ coefs
+            ).flatten()
+            future_weather_df["srad_dif"] = knn_reg.predict(
+                future_weather_df[["cos1", "rain"]].to_numpy()
             )
-            weather_df = pd.concat([past_weather_df, future_weather_df])
+            future_weather_df["srad"] = \
+                future_weather_df.srad_harm + future_weather_df.srad_dif
+            
+            past_weather_df = past_weather_df[
+                ["tmax", 'tmin', 'rain', 'srad']
+            ]
+            future_weather_df = future_weather_df[
+                ["tmax", 'tmin', 'rain', 'srad']
+            ]
+            
+            # Fill whatever is missed by repeating past_weather
+            post_forecast_dates =  pd.date_range(
+                end_date, plantingdate + timedelta(days=MAX_SIM_LENGTH)
+            )
+            post_forecast_df = past_weather_df.loc[[
+                datetime(d.year-1, d.month, d.day) 
+                for d in post_forecast_dates[1:]
+            ]]
+            post_forecast_df.index = [d.date() for d in post_forecast_dates[1:]]
+
+            # Concat dfs
+            weather_df = pd.concat([
+                past_weather_df, future_weather_df, post_forecast_df
+            ])
             weather_df = weather_df.sort_index()
             weather_df = weather_df.loc[
                 pd.to_datetime(weather_df.index) >= start_date
             ]
+            
             
         if tav_exists and tamp_exists:
             tav = db.get_static_par(con, schema, weather[0], weather[1], "tav")

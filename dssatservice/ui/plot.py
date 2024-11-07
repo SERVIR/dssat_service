@@ -565,7 +565,7 @@ def init_columnRange_chart(session):
         },
         "plot_lines": [
             {
-                "value": (session.adminBase.historical_data.value/1000).mean(),
+                "value": session.adminBase.obs_reference[1]/1000,
                 "color": "#32323232",
                 "width": 8,
                 "dash_style": "Solid",
@@ -577,7 +577,7 @@ def init_columnRange_chart(session):
                 }
             },
             {
-                "value": (session.adminBase.historical_data.value/1000).min(),
+                "value": session.adminBase.obs_reference[0]/1000,
                 "color": "#32323232",
                 "width": 3,
                 "dash_style": "Dash",
@@ -589,7 +589,7 @@ def init_columnRange_chart(session):
                 }
             },
             {
-                "value": (session.adminBase.historical_data.value/1000).max(),
+                "value": session.adminBase.obs_reference[2]/1000,
                 "color": "#32323232",
                 "width": 3,
                 "dash_style": "Dash",
@@ -787,8 +787,8 @@ def current_forecast_yield_plot(session):
         }
     })
     
-    min_value = session.adminBase.historical_data.value.min()/1000
-    min_year = session.adminBase.historical_data.set_index("year").value.idxmin()
+    min_value = session.adminBase.obs_reference[0]/1000
+    # min_year = session.adminBase.historical_data.set_index("year").value.idxmin()
     min_point = ScatterSeries().from_dict({
         "data": [
             {"x": 0, "y": round(min_value, 2)}
@@ -800,13 +800,13 @@ def current_forecast_yield_plot(session):
             "line_width": 0, 
         },
         "tooltip": {
-            "header_format": f'<span style="font-size: 12px; font-weight: bold">Reference period minimum ({min_year})</span><br>',
+            "header_format": f'<span style="font-size: 12px; font-weight: bold">Reference period minimum</span><br>',
             "point_format": '<span style="font-size: 12px"> {point.y} t/ha</span><br/>'
         }
     })
     
-    max_value = session.adminBase.historical_data.value.max()/1000
-    max_year = session.adminBase.historical_data.set_index("year").value.idxmax()
+    max_value = session.adminBase.obs_reference[2]/1000
+    # max_year = session.adminBase.historical_data.set_index("year").value.idxmax()
     max_point = ScatterSeries().from_dict({
         "data": [
             {"x": 0, "y": round(max_value, 2)}
@@ -818,7 +818,7 @@ def current_forecast_yield_plot(session):
             "line_width": 0, 
         },
         "tooltip": {
-            "header_format": f'<span style="font-size: 12px; font-weight: bold">Reference period maximum ({max_year})</span><br>',
+            "header_format": f'<span style="font-size: 12px; font-weight: bold">Reference period maximum</span><br>',
             "point_format": '<span style="font-size: 12px"> {point.y} t/ha</span><br/>'
         }
     })
