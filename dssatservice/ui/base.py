@@ -69,10 +69,11 @@ class AdminBase:
         self.forecast_results, self.forecast_overview = db.fetch_forecast_tables(
             con, schema, admin1
         )
-        self.historical_data = db.fetch_historical_data(con, schema, admin1)
+        # self.historical_data = db.fetch_historical_data(con, schema, admin1)
         tmp_df = db.fetch_cultivars(con, schema, admin1)
         tmp_df = tmp_df.set_index(["maturity_type"])
         self.cultivars = tmp_df.sort_values(by="season_length")
+        self.obs_reference = db.fetch_observed_reference(con, schema, admin1)
         # TODO: This will be replaced with a model performance stats
         # pars = db.fetch_baseline_pars(con, schema, admin1)
         # self.baseline_pars = SimulationPars(

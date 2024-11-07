@@ -146,7 +146,7 @@ def ingest_latest_forecast():
     db.add_latest_forecast(con, schema, file)
     # All simulations results
     results_df = pd.read_csv(
-        "/home/user/dssat_service/forecast_data/Kenya/forecast_241021.csv"
+        "/home/user/dssat_service/forecast_data/Kenya/forecast_20241107.csv"
     )
     db.dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
@@ -157,7 +157,7 @@ def ingest_latest_forecast():
     )
         # Overview file info
     overview_df = pd.read_csv(
-        "/home/user/dssat_service/forecast_data/Kenya/forecast_overview_241021.csv"
+        "/home/user/dssat_service/forecast_data/Kenya/forecast_overview_20241107.csv"
     )
     db.dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
@@ -186,6 +186,8 @@ def ingest_nmme_data():
     ing.ingest_nmme_temp(con, schema, ens)
     
 if __name__ == "__main__":
-    con = pg.connect(dbname=dbname)
-    con.close()
+    # con = pg.connect(dbname=dbname)
+    # con.close()
+    ingest_latest_forecast()
+    # ingest_historical_data()
     exit()
