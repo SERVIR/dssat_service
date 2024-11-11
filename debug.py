@@ -139,14 +139,14 @@ def ingest_historical_data():
     
 def ingest_latest_forecast():
     con = pg.connect(dbname=dbname)
-    schema = "kenya"
+    schema = "zimbabwe"
     # This piece of code is to upload the latest forecast tables to the db
     # Forecast map
-    file = "/home/user/dssat_service/forecast_data/Kenya/latest_forecast.geojson"
+    file = "/home/user/dssat_service/forecast_data/Zimbabwe/latest_forecast.geojson"
     db.add_latest_forecast(con, schema, file)
     # All simulations results
     results_df = pd.read_csv(
-        "/home/user/dssat_service/forecast_data/Kenya/forecast_20241107.csv"
+        "/home/user/dssat_service/forecast_data/Zimbabwe/forecast_20241111.csv"
     )
     db.dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
@@ -157,7 +157,7 @@ def ingest_latest_forecast():
     )
         # Overview file info
     overview_df = pd.read_csv(
-        "/home/user/dssat_service/forecast_data/Kenya/forecast_overview_20241107.csv"
+        "/home/user/dssat_service/forecast_data/Zimbabwe/forecast_overview_20241111.csv"
     )
     db.dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
@@ -170,11 +170,12 @@ def ingest_latest_forecast():
     
 def ingest_cultivars():
     con = pg.connect(dbname=dbname)
-    schema = "kenya"
+    schema = "zimbabwe"
+    # db._create_cultivars_table(con, schema)
     ing.ingest_cultivars(
         con, 
         schema, 
-        "/home/user/dssat_service/cultivar_selection/Kenya/cultivar_table.csv"
+        "/home/user/dssat_service/cultivar_selection/Zimbabwe/cultivar_table.csv"
     )
     con.close()
     
@@ -186,10 +187,10 @@ def ingest_nmme_data():
     ing.ingest_nmme_temp(con, schema, ens)
     
 if __name__ == "__main__":
-    con = pg.connect(dbname=dbname)
-    # ingest_latest_forecast()
+    # con = pg.connect(dbname=dbname)
+    ingest_latest_forecast()
     # ingest_historical_data()
-    
-    AdminBase(con, "kenya", "Uasin Gishu")
-    con.close()
+    # ingest_cultivars()
+    # AdminBase(con, "kenya", "Uasin Gishu")
+    # con.close()
     exit()
