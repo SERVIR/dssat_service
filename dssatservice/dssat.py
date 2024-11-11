@@ -208,15 +208,12 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
             ]
             
             # Fill whatever is missed by repeating past_weather
-            post_forecast_dates =  pd.date_range(
-                end_date, plantingdate + timedelta(days=MAX_SIM_LENGTH)
-            )
-            post_forecast_df = past_weather_df.loc[[
-                datetime(d.year-1, d.month, d.day) 
-                for d in post_forecast_dates[1:]
-            ]]
-            post_forecast_df.index = [d.date() for d in post_forecast_dates[1:]]
-
+            post_forecast_df = past_weather_df.copy()
+            post_forecast_df.index = post_forecast_df.index + timedelta(365)
+            post_forecast_df = post_forecast_df.loc[
+                ~post_forecast_df.index.isin(future_weather_df.index)
+            ]
+            
             # Concat dfs
             weather_df = pd.concat([
                 past_weather_df, future_weather_df, post_forecast_df
