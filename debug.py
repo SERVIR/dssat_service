@@ -187,8 +187,8 @@ def ingest_nmme_data():
     ing.ingest_nmme_temp(con, schema, ens)
     
 if __name__ == "__main__":
-    # con = pg.connect(dbname=dbname)
-    ingest_latest_forecast()
+    con = pg.connect(dbname=dbname)
+    # ingest_latest_forecast()
     # ingest_historical_data()
     # ingest_cultivars()
     # AdminBase(con, "kenya", "Uasin Gishu")
