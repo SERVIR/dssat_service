@@ -153,11 +153,13 @@ def db_to_tiff(con:pg.extensions.connection, schema, table, where, saveto):
     Exports raster fom table to tiff.
     """
     cur = con.cursor()
+    user = con.info.user
+    pswd = con.info.password
     cur.execute("SELECT current_database()")
     dbname = cur.fetchall()[0][0]
     # TODO: This won't work when connection to a remote database
     sql_args = \
-        f"PG:dbname='{dbname}' user='user' password='password' " + \
+        f"PG:dbname='{dbname}' user='{user}'"+" password='{0}' ".format(pswd) + \
         f"schema='{schema}' table='{table}' where='{where}' " +\
         "mode='2'"
     translate_options = gdal.TranslateOptions(format="GTiff")
