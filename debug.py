@@ -1,21 +1,17 @@
-from dssatservice.data.download import download_era5, download_nmme
-from dssatservice.data.ingest import (
-    ingest_era5_record, ingest_era5_series, ingest_soil, 
-    ingest_static, ingest_cultivars, ingest_baseline_pars,
-    ingest_baseline_run, calculate_climatology, ingest_nmme_rain,
-    ingest_nmme_temp, ingest_nmme
-    )
-from dssatservice.database import (
-    add_country, _create_soil_table, verify_series_continuity,
-    get_era5_for_point, get_soils, connect, _create_cultivars_table,
-    fetch_admin1_list, fetch_baseline_pars, get_envelope,
-    _create_climate_forecast_table
-    )
+"""
+This file is to debug while developing, but also serves as a demonstration
+as how the dssatservice package is used to setup and operate the service.
+
+Some functions are examples of basic setup funcionalities like: adding a new 
+domain, adding the soil data, adding the cultivars information, etc.
+"""
+import dssatservice.data.download as dwn
+import dssatservice.data.ingest as ing
+import dssatservice.database as db
 from dssatservice.ui.base import (
     admin_list, AdminBase, Session
 )
-from dssatservice.ui.plot import add_anomaly_bar
-from dssatservice.data.transform import parse_overview
+import dssatservice.data.transform as tr
 from dssatservice.dssat import run_spatial_dssat
 from datetime import datetime
 import psycopg2 as pg
@@ -24,45 +20,47 @@ import os
 import time
 import numpy as np
 import re
+import pandas as pd
 
 variable = "TMAX"
 date = datetime(2024, 1, 2)
 
 dbname = "dssatserv"
 
-# def add_country():
-#     shp = "/home/user/dssat_service/kenya_mngCalibration/data/shapes/ken_admbnda_adm1_iebc_20191031.shp"
-#     add_country(dbname, "Kenya", shp, "ADM1_EN")
-
+def add_country():
+    shp = "/home/user/dssat_service/kenya_mngCalibration/data/shapes/ken_admbnda_adm1_iebc_20191031.shp"
+    db.add_country(dbname, "Kenya", shp, "ADM1_EN")
 
 def ingest_era5_data():
-# os.remove(nc_path)
-    ingest_era5_record(dbname, "kenya", date)
-    ingest_era5_series(
+    con = pg.connect(dbname=dbname)
+    ing.ingest_era5_record(con, "kenya", date)
+    ing.ingest_era5_series(
         dbname, "kenya", 
         datetime(2010, 1, 1), 
         datetime(2010, 1, 31)
     )
+    con.close()
 
 def ingest_soil_data():
+    con = pg.connect(dbname=dbname)
     soil_path = "/home/user/dssat_service/data/soil_data/iSDASoil/KE.SOL"
     mask1 = "/home/user/dssat_service/data/subsaharanAfrica-maize.tif"
     mask2 = "/home/user/dssat_service/data/subsaharanAfrica-suitableAg-v2.tif"
     # _create_soil_table(dbname, "kenya")
-    ingest_soil(
-        dbname=dbname,
+    ing.ingest_soil(
+        con=con,
         schema="kenya",
         soilfile=soil_path,
         mask1=mask1,
         mask2=mask2
     )
-
+    con.close()
 
 def run_model():
     time0 = time.time()
-    # con = connect(dbname)
+    con = pg.connect(dbname=dbname)
     df, overview = run_spatial_dssat(
-        dbname=dbname, 
+        con=con, 
         schema="kenya", 
         admin1="Nakuru",
         plantingdate=datetime(2022, 2, 1),
@@ -70,10 +68,8 @@ def run_model():
         nitrogen=[(5, 20), (30, 10), (50, 10)],
         overview=True
     )
-    # con.close()
     df = df.iloc[:, 3:].astype(int).replace(-99, np.nan)
     print(df.describe())
-    # parse_overview("".join(overview))
     from collections import Counter
     print(Counter([l[:7] for l in overview if "Sowing" in l]))
     N_uptake = [
@@ -83,12 +79,17 @@ def run_model():
     ]
     print(np.mean(N_uptake), np.std(N_uptake))
     print(f"{(time.time() - time0):.3f} seconds running one season")
+    con.close()
 
-def run_model_forecast():
+def run_model_forecast_onthefly():
+    """
+    This is just running the model as one user would do it by getting NMME data.
+    It is not the function to run the operative forecast!!!
+    """
+    con = pg.connect(dbname=dbname)
     time0 = time.time()
-    # con = connect(dbname)
     df, overview = run_spatial_dssat(
-        dbname=dbname, 
+        con=con, 
         schema="kenya", 
         admin1="Bomet",
         plantingdate=datetime(2024, 3, 1),
@@ -96,7 +97,6 @@ def run_model_forecast():
         nitrogen=[(5, 20), (30, 10), (50, 10)],
         overview=True
     )
-    # con.close()
     df = df.iloc[:, 3:].astype(int).replace(-99, np.nan)
     print(df.describe())
     # parse_overview("".join(overview))
@@ -109,95 +109,88 @@ def run_model_forecast():
     ]
     print(np.mean(N_uptake), np.std(N_uptake))
     print(f"{(time.time() - time0):.3f} seconds running one season")
+    con.close()
 
 
 def ingest_static_data():
-    ingest_static(
-        dbname=dbname,
+    ing.ingest_static(
+        con=con,
         schema="kenya",
         rast="/home/user/dssat_service/data/weather_data/tav_tamp/tamp_kenya.tif",
         parname="tamp"
     )
 
-if __name__ == "__main__":
-    # NMME Download
+def ingest_historical_data():
+    con = pg.connect(dbname=dbname)
+    observed_df = pd.read_csv(
+        f"/home/user/dssat_service/forecast_data/Kenya/obs_data.csv"
+    )
+    # Make sure the admin name column is admin1
+    observed_df = observed_df.rename(columns={"admin_1": "admin1"})
+    observed_df["value"] *= 1000
+    db.dataframe_to_table(
+        f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
+        observed_df,
+        "kenya",
+        "historical_data",
+        "admin1"
+    )
+    con.close()
+    
+def ingest_latest_forecast():
+    con = pg.connect(dbname=dbname)
     schema = "zimbabwe"
-    # Get the envelope for that region
-    # bbox = get_envelope(dbname, schema)
-    # download_nmme("Precipitation", 1, bbox)
-    # calculate_climatology(dbname, schema)
-    # ingest_nmme_rain(dbname, schema, 1)
-    # ingest_nmme_temp(dbname, schema, 1)
-    # ingest_nmme(dbname, schema)
-    # run_model_forecast()
-    # con = connect(dbname)
-    # admin = admin_list(con, "kenya")
-    # session = Session(AdminBase(con, "kenya", "Bomet"))
-    # # session.adminBase.baseline_quantile_stats()
-    # # session.adminBase.baseline_description()
-    # session.run_experiment()
-    # add_anomaly_bar(None, session, False)
-    # # session.run_experiment()
-    # session.simPars.nitrogen_rate = (10, 20, 20)
-    # session.new_baseline()
-    # ingest_baseline_run(
-    #     dbname, "zimbabwe",
-    #     "/home/user/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_run.csv"
-    # )
-    # ingest_baseline_pars(
-    #     dbname, "zimbabwe",
-    #     "/home/user/dssat_service/web_service_dev/experiments/parameters/zimbabwe_baseline_pars.csv"
-    # )
-    # for country in ("zimbabwe", "kenya"):
-    #     _create_cultivars_table(dbname, country)
-    #     ingest_cultivars(
-    #         dbname, country,
-    #         f"/home/user/dssat_service/web_service_dev/experiments/parameters/{country}_cultivars_final.csv"
-    #     )
-    # out = verify_series_continuity(
-    #     connect(dbname=dbname), 
-    #     schema="kenya",
-    #     table="era5_rain", 
-    #     datefrom=datetime(2010, 1, 1), 
-    #     dateto=datetime(2023, 12, 31)
-    # )
-    # print(out)
-    # ingest_soil_data()
-    # run_model()
+    # This piece of code is to upload the latest forecast tables to the db
+    # Forecast map
+    file = "/home/user/dssat_service/forecast_data/Zimbabwe/latest_forecast.geojson"
+    db.add_latest_forecast(con, schema, file)
+    # All simulations results
+    results_df = pd.read_csv(
+        "/home/user/dssat_service/forecast_data/Zimbabwe/forecast_20241111.csv"
+    )
+    db.dataframe_to_table(
+        f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
+        results_df,
+        schema,
+        "latest_forecast_results",
+        "admin1"
+    )
+        # Overview file info
+    overview_df = pd.read_csv(
+        "/home/user/dssat_service/forecast_data/Zimbabwe/forecast_overview_20241111.csv"
+    )
+    db.dataframe_to_table(
+        f"postgresql+psycopg2://{con.info.user}:password@localhost:{con.info.port}/{con.info.dbname}",
+        overview_df,
+        schema,
+        "latest_forecast_overview",
+        "admin1"
+    )
+    con.close()
     
-    # Add country
-    # add_country(
-    #     dbname, 
-    #     "Zimbabwe", 
-    #     "/home/user/dssat_service/fewsnet_data/admin_bounds/zimbabwe_fewsnet_admin2.geojson", 
-    #     "name"
-    # )
+def ingest_cultivars():
+    con = pg.connect(dbname=dbname)
+    schema = "zimbabwe"
+    # db._create_cultivars_table(con, schema)
+    ing.ingest_cultivars(
+        con, 
+        schema, 
+        "/home/user/dssat_service/cultivar_selection/Zimbabwe/cultivar_table.csv"
+    )
+    con.close()
     
-    # Ingest soil data
-    # ingest_soil(
-    #     dbname=dbname,
-    #     schema="zimbabwe",
-    #     soilfile="/home/user/dssat_service/data/soil_data/iSDASoil/ZW.SOL",
-    #     mask1="/home/user/dssat_service/data/subsaharanAfrica-maize.tif",
-    #     mask2="/home/user/dssat_service/data/subsaharanAfrica-suitableAg-v2.tif"
-    # )
+def ingest_nmme_data():
+    con = pg.connect(dbname=dbname)
+    schema = "kenya"
+    ens = 1
+    ing.ingest_nmme_rain(con, schema, ens)
+    ing.ingest_nmme_temp(con, schema, ens)
     
-    # Ingest static data
-    # static_data = [
-    #     ("tamp", "/home/user/dssat_service/data/weather_data/tav_tamp/tamp_zimbabwe.tif"),
-    #     ("tav", "/home/user/dssat_service/data/weather_data/tav_tamp/tav_zimbabwe.tif")
-    # ]
-    # for parname, rast in static_data:
-    #     ingest_static(
-    #         dbname=dbname,
-    #         schema="zimbabwe",
-    #         rast=rast,
-    #         parname=parname
-    #     )
-    
-    # Ingest era5 data
-    # ingest_era5_series(
-    #     dbname, "zimbabwe", 
-    #     datetime(2010, 2, 1), 
-    #     datetime(2023, 12, 31)
-    # )
+if __name__ == "__main__":
+    # con = pg.connect(dbname=dbname)
+    ingest_latest_forecast()
+    # ingest_historical_data()
+    # ingest_cultivars()
+    # AdminBase(con, "kenya", "Uasin Gishu")
+    # con.close()
+    exit()

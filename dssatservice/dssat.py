@@ -15,20 +15,34 @@ import os
 import shutil
 from tqdm import tqdm
 import logging
+import psycopg2 as pg
 
 # For SRAD estimation when using NMME data
 from sklearn.neighbors import KNeighborsRegressor
 
 
 MIN_SAMPLES = 4
-MAX_SIM_LENGTH = 8*30 # This is maximum simulation lenght since planting. 
+# MAX_SIM_LENGTH = 8*30  
+MAX_SIM_LENGTH = 360 # This is maximum simulation lenght since planting.
 logger = logging.getLogger(__name__)
 
-def run_spatial_dssat(dbname:str, schema:str, admin1:str, 
+HARM_VARS = ["constant", "cos1", "sin1", "cos2", "sin2"]
+def add_harmonic_coefs(tmp_df):
+    tmp_df["t"] = np.array([
+        int(i.strftime('%j')) 
+        for i in tmp_df.index
+    ])/365
+    tmp_df["constant"] = 1
+    tmp_df["cos1"] = np.cos(2*np.pi*tmp_df["t"])
+    tmp_df["sin1"] = np.sin(2*np.pi*tmp_df["t"])
+    tmp_df["cos2"] = np.cos(np.pi*tmp_df["t"])
+    tmp_df["sin2"] = np.sin(np.pi*tmp_df["t"])
+
+def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str, 
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
                       all_random:bool=True, overview:bool=False,
-                      return_input=False, con=False,
+                      return_input=False,
                       **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
@@ -36,8 +50,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
 
     Arguments
     ----------
-    dbname: str
-        Name of the database
+    con: pg.extensions.connection
+        pg connection
     schema: str
         Name of the schema (country)
     admin1: str
@@ -71,13 +85,26 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     # start_date = plantingdate
     start_date = plantingdate - timedelta(days=30)
     end_date = plantingdate + timedelta(days=MAX_SIM_LENGTH)
-    close_connection = False
-    if not con:
-        con = db.connect(dbname)
-        close_connection = True
     db.check_admin1_in_country(con, schema, admin1)
     # Get soils and verify a minimum number of pixel samples
     soils = db.get_soils(con, schema, admin1, 1)
+    # Get weather pixels
+    query = """
+        WITH pts As ( 
+        SELECT (ST_PixelAsCentroids(ST_Clip(wt.rast, ad.geom))).geom as geom
+        FROM {0}.era5_rain as wt, {0}.admin as ad
+        WHERE 
+            fdate=%s
+        AND ad.admin1=%s
+        )  
+        SELECT ST_X(geom), ST_Y(geom) FROM pts;
+        """.format(schema)
+    cur = con.cursor()
+    cur.execute(query, (start_date, admin1,))
+    rows = cur.fetchall()
+    cur.close()
+    all_pixels_weather = pd.Series([(i[0], i[1]) for i in rows])
+    
     if len(soils) < MIN_SAMPLES:
        soils = db.get_soils(con, schema, admin1, 2)
        if len(soils) < MIN_SAMPLES:
@@ -85,20 +112,20 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
           assert len(soils) > MIN_SAMPLES, \
             f"Region is not large enough to have at least {MIN_SAMPLES} samples"
 
-    pixels = soils.apply(lambda row: (row.lon, row.lat), axis=1)
-    n_pixels = len(pixels)
+    all_pixels_soil = soils.apply(lambda row: (row.lon, row.lat), axis=1)
+    n_pixels = min(len(all_pixels_soil), len(all_pixels_weather))
     if all_random:
         # In case all pixel combinations are posible
         if n_pixels < np.sqrt(nens):
-            pix_prod = list(product(pixels, pixels))
+            pix_prod = list(product(all_pixels_soil, all_pixels_weather))
             soil_pixels = [p[0] for p in pix_prod]
             weather_pixels = [p[1] for p in pix_prod]
         else:
-            soil_pixels = pixels.sample(nens, replace=n_pixels<nens)
-            weather_pixels = pixels.sample(nens, replace=n_pixels<nens)
+            soil_pixels = all_pixels_soil.sample(nens, replace=n_pixels<nens)
+            weather_pixels = all_pixels_weather.sample(nens, replace=n_pixels<nens)
     else:
         nens = min(nens, n_pixels)
-        soil_pixels = weather_pixels = pixels.sample(nens, replace=False)
+        soil_pixels = weather_pixels = soil_pixels.sample(nens, replace=False)
 
     # tmpdir to save wth files
     if return_input:
@@ -111,8 +138,8 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     gs = GSRun()        
 
     # Check if TAVG and TAMP are in static table
-    tav_exists = db.verify_static_par_exists(dbname, schema, "tav", con)
-    tamp_exists = db.verify_static_par_exists(dbname, schema, "tamp", con)
+    tav_exists = db.verify_static_par_exists(con, schema, "tav")
+    tamp_exists = db.verify_static_par_exists(con, schema, "tamp")
     
     iter_pixels = list(enumerate(zip(soil_pixels, weather_pixels)))
     for (n, (soil, weather)) in tqdm(iter_pixels):
@@ -143,19 +170,59 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
                 con, schema, weather[0], weather[1], 
                 latest_past_weather, end_date, ens
             )            
-            # Estimate future srad using KNN
+            # Estimate forecast srad
+            # Adjust a harmonic model to past srad
+            add_harmonic_coefs(past_weather_df)          
+            past_weather_df["srad_rolling"] = \
+                past_weather_df.srad.rolling(10).mean()
+            A = past_weather_df.dropna()[HARM_VARS].to_numpy()
+            b = past_weather_df.dropna()["srad_rolling"].to_numpy()
+            coefs, _, _, _ = np.linalg.lstsq(A, b)
+            # Estimate the srad difference when compared to harmonic
+            past_weather_df["srad_harm"] = (
+                past_weather_df[HARM_VARS].to_numpy() @ coefs
+            ).flatten()
+            past_weather_df["srad_dif"] = \
+                past_weather_df.srad - past_weather_df.srad_harm
+            
+            # Adjust a KNN regressor to srad_diff using cos1 and rain
             knn_reg = KNeighborsRegressor()
-            x = past_weather_df[["tmax", "tmin", "rain"]].to_numpy()
-            y = past_weather_df["srad"].to_numpy()
-            knn_reg.fit(x, y)
-            future_weather_df["srad"] = knn_reg.predict(
-                future_weather_df[["tmax", "tmin", "rain"]].to_numpy()
+            x = past_weather_df[["cos1", "rain"]].to_numpy()
+            y = past_weather_df.srad_dif.to_numpy()
+            knn_reg = knn_reg.fit(x, y)
+            add_harmonic_coefs(future_weather_df)
+            future_weather_df["srad_harm"] = (
+                future_weather_df[HARM_VARS].to_numpy() @ coefs
+            ).flatten()
+            future_weather_df["srad_dif"] = knn_reg.predict(
+                future_weather_df[["cos1", "rain"]].to_numpy()
             )
-            weather_df = pd.concat([past_weather_df, future_weather_df])
+            future_weather_df["srad"] = \
+                future_weather_df.srad_harm + future_weather_df.srad_dif
+            
+            past_weather_df = past_weather_df[
+                ["tmax", 'tmin', 'rain', 'srad']
+            ]
+            future_weather_df = future_weather_df[
+                ["tmax", 'tmin', 'rain', 'srad']
+            ]
+            
+            # Fill whatever is missed by repeating past_weather
+            post_forecast_df = past_weather_df.copy()
+            post_forecast_df.index = post_forecast_df.index + timedelta(365)
+            post_forecast_df = post_forecast_df.loc[
+                ~post_forecast_df.index.isin(future_weather_df.index)
+            ]
+            
+            # Concat dfs
+            weather_df = pd.concat([
+                past_weather_df, future_weather_df, post_forecast_df
+            ])
             weather_df = weather_df.sort_index()
             weather_df = weather_df.loc[
                 pd.to_datetime(weather_df.index) >= start_date
             ]
+            
             
         if tav_exists and tamp_exists:
             tav = db.get_static_par(con, schema, weather[0], weather[1], "tav")
@@ -192,10 +259,9 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
 
         dssat_weather.write(tmp_dir_name)
 
-        # Planting assuming emergence 5 days after planting
+        # Planting 
         planting = {
             "PDATE": plantingdate, 
-            # "EDATE": plantingdate + timedelta(days=5),
             "PLDP": 5
         }
         if return_input:
@@ -214,19 +280,18 @@ def run_spatial_dssat(dbname:str, schema:str, admin1:str,
     if return_input:
         return input_files
     # Run DSSAT
-    if close_connection:
-        con.close()
     # Set automatic management
-    planting_window_start = plantingdate - timedelta(days=15)
-    planting_window_end = plantingdate + timedelta(days=15)
-    sim_controls = {
-        "PLANT": "F", # Automatic, force in last day of window
-        "PFRST": planting_window_start.strftime("%y%j"),
-        "PLAST": planting_window_end.strftime("%y%j"),
-        "PH2OL": 50, "PH2OU": 100, "PH2OD": 20, 
-        "PSTMX": 40, "PSTMN": 10
-    }
+    # planting_window_start = plantingdate - timedelta(days=15)
+    # planting_window_end = plantingdate + timedelta(days=15)
+    # sim_controls = {
+    #     "PLANT": "F", # Automatic, force in last day of window
+    #     "PFRST": planting_window_start.strftime("%y%j"),
+    #     "PLAST": planting_window_end.strftime("%y%j"),
+    #     "PH2OL": 50, "PH2OU": 100, "PH2OD": 20, 
+    #     "PSTMX": 40, "PSTMN": 10
+    # }
     # Get run kwargs if defined
+    sim_controls = {}
     start_date = kwargs.get("start_date", start_date)
     sim_controls = kwargs.get("sim_controls", sim_controls)
     out = gs.run(

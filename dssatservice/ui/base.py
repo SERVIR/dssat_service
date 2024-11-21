@@ -42,6 +42,7 @@ class SimulationPars:
     nitrogen_rate: list
     cultivar: str
     planting_date: datetime
+    irrigation: bool
 
 class AdminBase:
     """
@@ -57,40 +58,37 @@ class AdminBase:
         self.connection = con
         self.admin1 = admin1 
         self.schema = schema
-        pars = db.fetch_baseline_pars(con, schema, admin1)
-        self.baseline_pars = SimulationPars(
-            nitrogen_dap = (5, 30, 60),
-            nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
-            cultivar = pars["cultivar"],
-            planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
-        )
-        baseline_data = db.fetch_baseline_run(con, schema, admin1)
-        self.baseline_run = baseline_data.loc[
-            baseline_data.year.isin(BASELINE_YEARS)
-        ]
+        # baseline_data = db.fetch_baseline_run(con, schema, admin1)
+        # self.baseline_run = baseline_data.loc[
+        #     baseline_data.year.isin(BASELINE_YEARS)
+        # ]
 
-        self.baseline_stats = self.baseline_quantile_stats()
-        self.validation_run =  baseline_data.dropna()
+        # self.baseline_stats = self.baseline_quantile_stats()
+        # self.validation_run =  baseline_data.dropna()
+        
+        self.forecast_results, self.forecast_overview = db.fetch_forecast_tables(
+            con, schema, admin1
+        )
+        # self.historical_data = db.fetch_historical_data(con, schema, admin1)
         tmp_df = db.fetch_cultivars(con, schema, admin1)
-        tmp_df["yield_avg"] = (tmp_df.yield_avg/1000).round(1)
-        tmp_df = tmp_df.set_index(["yield_avg", "season_length"])
-        self.cultivars = tmp_df.sort_index()
-        
-        self.cultivar_labels = dict(zip(
-            self.cultivars.cultivar,
-            self.cultivars.index.map(
-                # lambda x: f"{x[0]} kg/ha pot. - {x[1]} days mat."
-                lambda x: f"{CULTIVAR_NAMES[self.cultivars.loc[x, 'cultivar']]} ({x[1]} days)"
-                
-            ),
-        ))
-        self.cultivar_labels_inv = {v: k for k, v in self.cultivar_labels.items()}
-        
+        tmp_df = tmp_df.set_index(["maturity_type"])
+        self.cultivars = tmp_df.sort_values(by="season_length")
+        self.obs_reference = db.fetch_observed_reference(con, schema, admin1)
+        # TODO: This will be replaced with a model performance stats
+        # pars = db.fetch_baseline_pars(con, schema, admin1)
+        # self.baseline_pars = SimulationPars(
+        #     nitrogen_dap = (5, 30, 60),
+        #     nitrogen_rate = tuple([pars["nitrogen"]/3]*3),
+        #     # cultivar = pars["cultivar"],
+        #     cultivar =  self.cultivars.loc["Medium", "cultivar"],
+        #     planting_date = datetime(BASELINE_YEARS[-1], pars["planting_month"], 1)
+        # )
         
     def baseline_description(self):
         """
         Returns a string that describes the current baseline scenario.
         """
+        return ""
         cultivar = self.baseline_pars.cultivar
         plantingdate = self.baseline_pars.planting_date
         nitro = sum(self.baseline_pars.nitrogen_rate)
@@ -148,7 +146,14 @@ class Session:
         baseline
         """
         self.adminBase = adminBase
-        self.simPars = self.adminBase.baseline_pars
+        # self.simPars = self.adminBase.baseline_pars
+        self.simPars = SimulationPars(
+            nitrogen_dap = (0,),
+            nitrogen_rate = (0,),
+            cultivar =  self.adminBase.cultivars.loc["Medium", "cultivar"],
+            planting_date = datetime(2024, 1, 1),
+            irrigation = False
+        )
         self.experiment_results = pd.DataFrame(
             [], 
             columns=[
@@ -187,7 +192,8 @@ class Session:
         if fakerun: # To test plots when the model is not locally set up
             self.latest_run = pd.DataFrame({
                 "HARWT": (np.random.normal(0, 1, 50)*100) + 500,
-                "MAT": np.random.uniform(100, 180, 50)
+                "MAT": np.random.uniform(100, 180, 50),
+                "TIRR": np.random.uniform(0, 200, 50)
             })
             self.latest_overview = [f"{i}\n" for i in FAKE_OVERVIEW.split("\n")]
             self.add_experiment_results()
@@ -205,14 +211,21 @@ class Session:
                 self.simPars.planting_date.month, 
                 self.simPars.planting_date.day
             )
-        TIMEDELTA_WINDOW = 1
-        planting_window_start = plantingdate - timedelta(days=TIMEDELTA_WINDOW)
-        planting_window_end = plantingdate + timedelta(days=TIMEDELTA_WINDOW)
-        sim_controls = {
-            "PLANT": "F", # Automatic, force in last day of window
-            "PFRST": planting_window_start.strftime("%y%j"),
-            "PLAST": planting_window_end.strftime("%y%j"),
-        }
+        sim_controls = {}
+        # TIMEDELTA_WINDOW = 1
+        # planting_window_start = plantingdate - timedelta(days=TIMEDELTA_WINDOW)
+        # planting_window_end = plantingdate + timedelta(days=TIMEDELTA_WINDOW)
+        # sim_controls = {
+        #     "PLANT": "F", # Automatic, force in last day of window
+        #     "PFRST": planting_window_start.strftime("%y%j"),
+        #     "PLAST": planting_window_end.strftime("%y%j"),
+        # }
+        if self.simPars.irrigation:
+            sim_controls["IRRIG"] = "A"
+            sim_controls["IMDEP"] = 30
+            sim_controls["ITHRL"] = 50
+            sim_controls["ITHRU"] = 100
+            
         df, overview = run_spatial_dssat(
             dbname="", 
             con=self.adminBase.connection,
