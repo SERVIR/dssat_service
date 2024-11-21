@@ -11,6 +11,7 @@ import tempfile
 from datetime import datetime
 import re
 import subprocess
+import psycopg2 as pg
 
 from osgeo import gdal
 from osgeo import osr
@@ -62,7 +63,8 @@ def write_tiff(lat, lon, res, data, tiffpath=None, epsg=4326):
     ods = None
     return tiffpath
 
-def nc_to_tiff(variable:str, date:datetime, ncpath:str, tiffpath:str=None, **kwargs):
+def nc_to_tiff(variable:str, date:datetime, ncpath:str, tiffpath:str=None,
+               **kwargs):
     """
     Convert netcdf file to tiff. Returns path to tiff.
 
@@ -146,12 +148,18 @@ def tiff_union(tifflist, tiffout, redf=np.mean, calc="mean(a,axis=0)"):
         and resolution"""
     gdal_calc.Calc(calc=calc, a=tifflist, outfile=tiffout)
 
-def db_to_tiff(dbname, schema, table, where, saveto):
+def db_to_tiff(con:pg.extensions.connection, schema, table, where, saveto):
     """
     Exports raster fom table to tiff.
     """
+    cur = con.cursor()
+    user = con.info.user
+    pswd = con.info.password
+    cur.execute("SELECT current_database()")
+    dbname = cur.fetchall()[0][0]
+    # TODO: This won't work when connection to a remote database
     sql_args = \
-        f"PG:dbname='{dbname}' user='dquintero' password='eQY3_Fwd' " + \
+        f"PG:dbname='{dbname}' user='{user}'"+" password='{0}' ".format(pswd) + \
         f"schema='{schema}' table='{table}' where='{where}' " +\
         "mode='2'"
     translate_options = gdal.TranslateOptions(format="GTiff")
