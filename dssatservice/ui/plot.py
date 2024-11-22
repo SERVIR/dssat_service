@@ -551,57 +551,73 @@ def init_columnRange_chart(session):
             "font-size": "15px"
         }
     }
-    my_chart.options.y_axis = {
-        "title": {
-            'text': 'Yield (t/ha)', 
-            "style": {
-                "font-size": "15px",
-            }
-        },
-        "labels": {
-            "style": {
-                "font-size": "15px",
-            }
-        },
-        "plot_lines": [
-            {
-                "value": session.adminBase.obs_reference[1]/1000,
-                "color": "#32323232",
-                "width": 8,
-                "dash_style": "Solid",
-                "z_index": 99,
-                "label": {
-                    "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>average</b>",
-                    "align": "left",
-                    "style": {"color": "black", "font-size": 13}
+    if any(np.isnan(session.adminBase.obs_reference)):
+        my_chart.options.y_axis = {
+            "title": {
+                'text': 'Yield (t/ha)', 
+                "style": {
+                    "font-size": "15px",
                 }
             },
-            {
-                "value": session.adminBase.obs_reference[0]/1000,
-                "color": "#32323232",
-                "width": 3,
-                "dash_style": "Dash",
-                "z_index": 99,
-                "label": {
-                    "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>min</b>",
-                    "align": "left",
-                    "style": {"color": "black", "font-size": 13}
-                }
-            },
-            {
-                "value": session.adminBase.obs_reference[2]/1000,
-                "color": "#32323232",
-                "width": 3,
-                "dash_style": "Dash",
-                "z_index": 99,
-                "label": {
-                    "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>max</b>",
-                    "align": "left",
-                    "style": {"color": "black", "font-size": 13}
+            "labels": {
+                "style": {
+                    "font-size": "15px",
                 }
             }
-        ]
-    }
+        }
+    else:
+        my_chart.options.y_axis = {
+            "title": {
+                'text': 'Yield (t/ha)', 
+                "style": {
+                    "font-size": "15px",
+                }
+            },
+            "labels": {
+                "style": {
+                    "font-size": "15px",
+                }
+            },
+            "plot_lines": [
+                {
+                    "value": session.adminBase.obs_reference[1]/1000,
+                    "color": "#32323232",
+                    "width": 8,
+                    "dash_style": "Solid",
+                    "z_index": 99,
+                    "label": {
+                        "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>average</b>",
+                        "align": "left",
+                        "style": {"color": "black", "font-size": 13}
+                    }
+                },
+                {
+                    "value": session.adminBase.obs_reference[0]/1000,
+                    "color": "#32323232",
+                    "width": 3,
+                    "dash_style": "Dash",
+                    "z_index": 99,
+                    "label": {
+                        "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>min</b>",
+                        "align": "left",
+                        "style": {"color": "black", "font-size": 13}
+                    }
+                },
+                {
+                    "value": session.adminBase.obs_reference[2]/1000,
+                    "color": "#32323232",
+                    "width": 3,
+                    "dash_style": "Dash",
+                    "z_index": 99,
+                    "label": {
+                        "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>max</b>",
+                        "align": "left",
+                        "style": {"color": "black", "font-size": 13}
+                    }
+                }
+            ]
+        }
+            
     my_chart.options.x_axis = {
         "title": {
             'text': 'Experiment', 

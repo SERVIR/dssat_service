@@ -11,6 +11,7 @@ import dssatservice.database as db
 from dssatservice.ui.base import (
     admin_list, AdminBase, Session
 )
+from dssatservice.ui import plot
 import dssatservice.data.transform as tr
 from dssatservice.dssat import run_spatial_dssat
 from datetime import datetime
@@ -188,9 +189,13 @@ def ingest_nmme_data():
     
 if __name__ == "__main__":
     con = pg.connect(dbname=dbname)
+    session = Session(
+        AdminBase(con, "kenya", "Uasin Gishu")
+    )
+    plot.init_columnRange_chart(session)
     # ingest_latest_forecast()
     # ingest_historical_data()
     # ingest_cultivars()
     # AdminBase(con, "kenya", "Uasin Gishu")
-    # con.close()
+    con.close()
     exit()
