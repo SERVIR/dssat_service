@@ -1,5 +1,6 @@
 """
-All the database operations are included here. 
+It contains most of the functions to create schemas, tables, and get data from
+the database.
 """
 import psycopg2 as pg
 from sqlalchemy import create_engine
@@ -39,7 +40,9 @@ def connect(dbname):
         return con
 
 def create_schema(con, schema):
-    """Creates a new schema"""
+    """
+    Creates a new schema. There is one schema per domain (country)
+    """
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -52,7 +55,9 @@ def create_schema(con, schema):
     return
 
 def _create_reanalysis_table(con, schema, table):
-    """Creates a renalysis table"""
+    """
+    Creates a renalysis table for the schema and variable (table) specified.
+    """
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -81,7 +86,10 @@ def _create_reanalysis_table(con, schema, table):
     return 
 
 def _create_climate_forecast_table(con, schema, table):
-    """Creates a climate forecast table"""
+    """
+    Creates a climate forecast table for the schema and variable (table) 
+    specified
+    """
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -115,7 +123,9 @@ def _create_climate_forecast_table(con, schema, table):
     return 
 
 def _create_static_table(con, schema):
-    """Creates table for static rasters"""
+    """
+    Creates table for static rasters
+    """
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -144,7 +154,9 @@ def _create_static_table(con, schema):
     return 
 
 def _create_soil_table(con, schema):
-    """Creates soil table"""
+    """
+    Creates soil table
+    """
     table = "soil"
     # con = connect(dbname)
     cur = con.cursor()
@@ -176,7 +188,9 @@ def _create_soil_table(con, schema):
     return 
 
 def _create_cultivars_table(con, schema):
-    """Creates soil table"""
+    """
+    Creates the cultivar_options table
+    """
     table = "cultivar_options"
     # con = connect(dbname)
     cur = con.cursor()
@@ -204,7 +218,9 @@ def _create_cultivars_table(con, schema):
     return
 
 def _create_baseline_pars_table(con, schema):
-    """"""
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     table = "baseline_pars"
     # con = connect(dbname)
     cur = con.cursor()
@@ -230,7 +246,9 @@ def _create_baseline_pars_table(con, schema):
     return
 
 def _create_baseline_run_table(con, schema):
-    """"""
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     table = "baseline_run"
     # con = connect(dbname)
     cur = con.cursor()
@@ -258,6 +276,9 @@ def _create_baseline_run_table(con, schema):
     return
 
 def _create_climatology_table(con, schema):
+    """
+    Creates a table for the monthly climatology.
+    """
     ds = "era5"
     # con = connect(dbname)
     cur = con.cursor()
@@ -288,7 +309,9 @@ def _create_climatology_table(con, schema):
 
 
 def schema_exists(con, schema):
-    """Check if schema exists in database."""
+    """
+    Check if schema exists in database.
+    """
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -303,7 +326,9 @@ def schema_exists(con, schema):
     return schema_exists 
 
 def table_exists(con, schema, table):
-    """Check if table exists in the database."""
+    """
+    Check if table exists in the database and schema.
+    """
     # con = connect(dbname)
     cur = con.cursor()
     query = """
@@ -387,7 +412,7 @@ def add_country(con:pg.extensions.connection, name:str, shapefile:str,
 def get_envelope(con:pg.extensions.connection, schema:str, pad=0.1):
     """
     Get the envelope for the region. Envelope was previously created
-    as a materialized view
+    as a materialized view.
     """
     # con = connect(dbname)
     cur = con.cursor()
@@ -405,7 +430,9 @@ def get_envelope(con:pg.extensions.connection, schema:str, pad=0.1):
     return bbox
 
 def delete_rasters(con, schema, table, date=None, where=None):
-    """If date already exists delete associated rasters before ingesting."""
+    """
+    If date already exists delete associated rasters before ingesting.
+    """
     # con = connect(dbname)
     cur = con.cursor()
     if (where is None):
@@ -430,8 +457,8 @@ def delete_rasters(con, schema, table, date=None, where=None):
         con.commit()
     cur.close()
 
-def tiff_to_db(tiffpath:str, con:pg.extensions.connection, schema:str, table:str, 
-               date:datetime=None, ens:int=None, par:str=None):
+def tiff_to_db(tiffpath:str, con:pg.extensions.connection, schema:str,
+               table:str, date:datetime=None, ens:int=None, par:str=None):
     """
     Saves tiff to the database.
 
@@ -552,7 +579,9 @@ def tiff_to_db(tiffpath:str, con:pg.extensions.connection, schema:str, table:str
 
 def verify_static_par_exists(con:pg.extensions.connection, schema:str,
                              parname:str):
-    """It will raise an error if the static parameter already exists"""
+    """
+    It will raise an error if the static parameter already exists.
+    """
 
     if not table_exists(con, schema, "static"):
         return False
@@ -603,9 +632,8 @@ def latest_date(con, schema:str, table:str):
 def get_era5_for_point(con, schema:str, lon:float, lat:float,
                        datefrom:datetime, dateto:datetime):
     """
-    Get the weather series for the requested point and time period. It returns 
-    a dict containing the series for each weather variable. It returns a df with
-    the time series for that point.
+    Get the EAR5 weather series for the requested point and time period. It 
+    returns a df with the time series for that point.
     """
     for var in VARIABLES_ERA5_NC.keys():
         table = f"era5_{var}"
@@ -651,9 +679,8 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
 def get_nmme_for_point(con, schema:str, lon:float, lat:float,
                        datefrom:datetime, dateto:datetime, ens:int):
     """
-    Get the weather series for the requested point, ensemble and time period. 
-    It returns a dict containing the series for each weather variable. It 
-    returns a df with the time series for that point.
+    Get the NMME weather series for the requested point, ensemble and time 
+    period. returns a df with the time series for that point.
     """
     for var in VARIABLES_ERA5_NC.keys():
         if var == "srad":
@@ -725,7 +752,9 @@ def get_soils(con, schema:str, admin1:str, mask:int=None):
     return df
 
 def get_static_par(con, schema:str, lon:float, lat:float, par:str):
-    """Get the static parameter value for a location"""
+    """
+    Get a static parameter value for a location
+    """
     cur = con.cursor()
     query = """
         SELECT ST_value(ra.rast, pn.pt_geom) AS val
@@ -746,6 +775,9 @@ def get_static_par(con, schema:str, lon:float, lat:float, par:str):
         return rows[0][0]
     
 def check_admin1_in_country(con, schema, admin1):
+    """
+    Check if the admin1 unit is on the country geometry table.
+    """
     cur = con.cursor()
     query ="""
         SELECT admin1 FROM {0}.admin
@@ -761,10 +793,12 @@ def check_admin1_in_country(con, schema, admin1):
     
 def fetch_admin1_list(con, schema):
     """
+    NOT IMPLEMENTED, it was part of former stages of the service.
     Returns a list of admin units that are set to simulate. I.E. they must have
-    a baseline defined in the baseline_pars table. If there is not baseline defined
-    it is because the admin unit is too small to get more than 4 pixels from its
-    bound, or because there was not observed data to generate a baseline.
+    a baseline defined in the baseline_pars table. If there is not baseline 
+    defined it is because the admin unit is too small to get more than 4 pixels
+    from its bound, or because there was not observed data to generate a 
+    baseline.
     """
     cur = con.cursor()
     query = """
@@ -778,7 +812,9 @@ def fetch_admin1_list(con, schema):
     return [r[0] for r in rows]
 
 def fetch_baseline_pars(con, schema, admin1):
-    """"""
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     cur = con.cursor()
     query = """
         SELECT cultivar, planting_month, nitrogen, crps, rpss 
@@ -801,6 +837,9 @@ def fetch_baseline_pars(con, schema, admin1):
     return pars_dict
 
 def fetch_baseline_run(con, schema, admin1):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     cur = con.cursor()
     query = """
         SELECT year, harwt, obs  
@@ -816,6 +855,9 @@ def fetch_baseline_run(con, schema, admin1):
     return DataFrame(rows, columns=["year", "sim", "obs"])
 
 def fetch_cultivars(con, schema, admin1):
+    """
+    Returns the cultivar options for the admin1 unit.
+    """
     cur = con.cursor()
     query = """
         SELECT cultivar, maturity_type, season_length
@@ -838,7 +880,7 @@ def add_latest_forecast(con:pg.extensions.connection, schema:str, geojson:str):
     """
     Add the latest forecast to the DB. The geojson/shp must contain the next 
     columns: admin1, pred_cat, pred, obs_avg, planting_p, ref_period, nitro_rate,
-    urea_rate
+    urea_rate.
     """
     gdf = gpd.read_file(geojson)
     gdf["geometry"] = gdf.geometry.simplify(0.001)
@@ -862,6 +904,10 @@ def add_latest_forecast(con:pg.extensions.connection, schema:str, geojson:str):
     return
 
 def dataframe_to_table(connectionstr, df, schema, table, index_label):
+    """
+    Uploads a dataframe to the database. It is used to upload the latest forecast
+    results.
+    """
     engine = create_engine(connectionstr)
     df = df.set_index(index_label)
     df.to_sql(
@@ -870,6 +916,10 @@ def dataframe_to_table(connectionstr, df, schema, table, index_label):
     )
     
 def fetch_forecast_tables(con, schema, admin1):
+    """
+    Returns the latest forecast results for the required admin1 unit: DSSAT end
+    of season output, and DSSAT overview file.
+    """
     cur = con.cursor()
     # Get forecast results
     query = """
@@ -903,6 +953,9 @@ def fetch_forecast_tables(con, schema, admin1):
     return results_df, overview_df
 
 def fetch_historical_data(con, schema, admin1):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     cur = con.cursor()
     # Get forecast results
     query = """
@@ -924,6 +977,9 @@ def fetch_historical_data(con, schema, admin1):
     return df
 
 def fetch_observed_reference(con, schema, admin1):
+    """
+    Get the observed minimum, mean, and maximum yield for that admin1.
+    """
     cur = con.cursor()
     # Get forecast results
     query = """

@@ -46,9 +46,7 @@ class SimulationPars:
 
 class AdminBase:
     """
-    This class handles the admin unit and its parameters. Those parameters include:
-    baseline parameters, baseline runs, cultivars for that admin unit. Basically 
-    anything that is associated to that admin unit.
+    This class handles the admin unit and its cultivars and latest forecast.
     """
     def __init__(self, con, schema, admin1):
         """
@@ -58,18 +56,10 @@ class AdminBase:
         self.connection = con
         self.admin1 = admin1 
         self.schema = schema
-        # baseline_data = db.fetch_baseline_run(con, schema, admin1)
-        # self.baseline_run = baseline_data.loc[
-        #     baseline_data.year.isin(BASELINE_YEARS)
-        # ]
 
-        # self.baseline_stats = self.baseline_quantile_stats()
-        # self.validation_run =  baseline_data.dropna()
-        
         self.forecast_results, self.forecast_overview = db.fetch_forecast_tables(
             con, schema, admin1
         )
-        # self.historical_data = db.fetch_historical_data(con, schema, admin1)
         tmp_df = db.fetch_cultivars(con, schema, admin1)
         tmp_df = tmp_df.set_index(["maturity_type"])
         self.cultivars = tmp_df.sort_values(by="season_length")
@@ -86,6 +76,7 @@ class AdminBase:
         
     def baseline_description(self):
         """
+        NOT IMPLEMENTED, it was part of former stages of the service.
         Returns a string that describes the current baseline scenario.
         """
         return ""
@@ -102,6 +93,7 @@ class AdminBase:
     
     def baseline_quantile_stats(self):
         """
+        NOT IMPLEMENTED, it was part of former stages of the service.
         Calculates the mean and std for each quantile in the baseline run.
         """
         baseline_df = self.baseline_run
@@ -117,6 +109,7 @@ class AdminBase:
     
     def get_quantile_anomalies(self, df_run):
         """
+        NOT IMPLEMENTED, it was part of former stages of the service.
         Estimates the quantile anomaly for a run based on its own baseline
         """
         df_run = df_run.copy()
@@ -142,8 +135,7 @@ class Session:
     """
     def __init__(self, adminBase:AdminBase):
         """
-        Initializes the session setting the simulation parameters to the admin 
-        baseline
+        Initializes the session.
         """
         self.adminBase = adminBase
         # self.simPars = self.adminBase.baseline_pars
@@ -248,6 +240,7 @@ class Session:
     
     def new_baseline(self):
         """
+        NOT IMPLEMENTED, it was part of former stages of the service.
         Run the model to get a new baseline given the current parameters
         """
         df_list = []

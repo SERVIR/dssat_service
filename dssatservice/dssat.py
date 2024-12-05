@@ -1,5 +1,5 @@
 """
-This module contains 
+This module contains the function to run the model given a set of inputs.
 """
 from spatialDSSAT.run import GSRun
 from DSSATTools import Weather

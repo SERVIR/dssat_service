@@ -197,6 +197,7 @@ def ingest_cultivars(con:pg.extensions.connection, schema:str, csv:str):
         
 def ingest_baseline_pars(con:pg.extensions.connection, schema:str, csv:str):
     """
+    NOT IMPLEMENTED, it was part of former stages of the service.
     Ingest baseline parameters. The data to ingest must be in a csv with the next
     columns: 
         admin1
@@ -227,6 +228,7 @@ def ingest_baseline_pars(con:pg.extensions.connection, schema:str, csv:str):
 
 def ingest_baseline_run(con:pg.extensions.connection, schema:str, csv:str):
     """
+    NOT IMPLEMENTED, it was part of former stages of the service.
     Ingest baseline run. The data to ingest must be in a csv with the next
     columns: 
         admin1
@@ -254,6 +256,9 @@ def ingest_baseline_run(con:pg.extensions.connection, schema:str, csv:str):
     cur.close()
         
 def ingest_nmme_rain(con:pg.extensions.connection, schema:str, ens:int):
+    """
+    Ingest the NMME rain data
+    """
     logger = logging.getLogger(__name__)
     if not db.table_exists(con, schema, f"nmme_rain"):
          db._create_climate_forecast_table(con, schema, f"nmme_rain")
@@ -388,11 +393,18 @@ def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
     shutil.rmtree(folder)
     
 def ingest_nmme(con:pg.extensions.connection, schema:str):
+    """
+    Ingest the NMME Rain and temperature data
+    """
     for e in range(1, 11):
         ingest_nmme_temp(con, schema, e)
         ingest_nmme_rain(con, schema, e)
 
 def calculate_climatology(con:pg.extensions.connection, schema:str):
+    """
+    It calculates and ingests the climatology using the available reanalysis 
+    data in the ERA5 tables.
+    """
     table = "era5_clim"
     assert not db.table_exists(con, schema, table), \
         f"{schema}.{table} exists. Drop the table before running this function  "

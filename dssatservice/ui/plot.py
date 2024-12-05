@@ -1,5 +1,5 @@
 """
-Functions to create highchart plots
+Functions to create highchart plots.
 """
 
 from highcharts_core.chart import Chart
@@ -56,6 +56,9 @@ CAT_COLORS = ['#cc0000', "#ff9933", "#ffff66", "#99cc00", "#009933"]
 ADMIN_NAMES = {"kenya": "County", "zimbabwe": "District"}
 
 def columnRange_data(df, qrange=(.05, .95)):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     sim_data = df.groupby("year").sim.quantile(qrange)
     sim_data = sim_data.sort_index().round(2)
     data = []
@@ -65,83 +68,10 @@ def columnRange_data(df, qrange=(.05, .95)):
         )
     return data
 
-# def validation_chart(session:Session):
-#     adminBase=session.adminBase
-#     my_chart = Chart()
-#     my_chart.options = HighchartsOptions()
-#     my_chart.options.title = {
-#         'text': f'Observed and Simulated yield for the baseline scenario in {adminBase.admin1}', 
-#         "style": {
-#             "font-size": "15px"
-#         }
-#     }
-#     my_chart.options.y_axis = {
-#         "title": {
-#             'text': 'Yield (t/ha)', 
-#             "style": {
-#                 "font-size": "15px"
-#             }
-#         },
-#         "labels": {
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         }
-#     }
-#     my_chart.options.x_axis = {
-#         "title": {
-#             'text': 'Year', 
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         },
-#         "labels": {
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         }
-#     }
-#     my_chart.options.tooltip = {
-#         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
-#         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-#             '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
-#     }
-#     my_chart.options.legend = Legend(
-#         label_format='<span style="font-size: 12px">{name}</span><br/>'
-#     )
-#     tmp_df = adminBase.validation_run
-#     for n, qrange in enumerate(Q_RANGE_PLOTS):
-#         data = columnRange_data(tmp_df, qrange)
-#         column = ColumnRangeSeries().from_array(data)
-#         column.name = f"Simulated yield ({SERIES_CI[n]}% CI)"
-#         column.color = COLORS[n]
-#         column.grouping = False
-#         column.border_width = 0.
-#         my_chart.add_series(column)
-#     # Observed scatterplot
-#     data = tmp_df.groupby("year").obs.mean().round(3).reset_index().to_numpy()
-#     # scatter = ScatterSeries().from_array(data)
-#     scatter = ScatterSeries().from_dict({
-#         "data": [
-#             {"x": x, "y": y} for x, y in data
-#         ]
-#     })
-#     scatter.name = "Observed"
-#     # scatter.color = "#ff3300"
-#     scatter.color = "#FFFFFF"
-#     scatter.marker = {
-#         "symbol": "square", "radius": 6, "line_color":"#000000",
-#         "line_width": 2, 
-#     }
-#     scatter.tooltip = {
-#         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
-#         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-#             '<span style="font-size: 12px">{series.name}: {point.y} kg/ha</span><br/>'
-#     }
-#     my_chart.add_series(scatter)
-#     return my_chart.to_dict()
-
 def get_bin_counts(series):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     MAX_BINS = 10
     vals = series.sort_values().to_numpy()
     vals = vals + np.random.normal(0, .001, 50)
@@ -163,6 +93,9 @@ def get_bin_counts(series):
     return np.array(counts), np.array(bins)
 
 def validation_chart(session:Session):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     adminBase=session.adminBase
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
@@ -255,7 +188,7 @@ def validation_chart(session:Session):
 
 def init_anomalies_chart():
     """
-    Creates and returns an anomaly chart
+    NOT IMPLEMENTED, it was part of former stages of the service.
     """
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
@@ -318,7 +251,7 @@ Z_EXT_LIM = 2 # Limit for extreme values
 
 def assign_categories(data):
     """
-    Assign a yield category based on the anomaly compared to baseline
+    NOT IMPLEMENTED, it was part of former stages of the service.
     """
     data = np.array(data)
     very_low = (data < -Z_EXT_LIM).mean()*100
@@ -335,6 +268,9 @@ def assign_categories(data):
     # return list(map(int, [very_high, high, norm, low, very_low]))
 
 def get_anomaly_series_data(session, model_based=True):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     # This is for anomaly based in model
     if model_based:
         data = session.adminBase.get_quantile_anomalies(session.latest_run)
@@ -367,13 +303,16 @@ def get_anomaly_series_data(session, model_based=True):
     return new_data
 
 def clear_yield_chart(chart_dict):
-    """"""
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     for serie in chart_dict["userOptions"]["series"]:
         serie["data"] = []
 
 def init_stress_chart(stress_type):
     """
-    Returns an stress chart. stress_type is water or nitrogen
+    Initilizes the stress chart for the stress type passed. Stress type can be 
+    either water or nitrogen
     """
     assert stress_type in STRESS_COLUMNS
     my_chart = Chart()
@@ -424,6 +363,9 @@ def init_stress_chart(stress_type):
     return my_chart
 
 def process_overview(overview):
+    """
+    Process the lines of the DSSAT overview file.
+    """
     overview = parse_overview("".join(overview))
     overview = overview.set_index(["RUN", 'devPhase']).astype(float).reset_index()
     overview["watStress"] = overview[['stressWatPho', 'stressWatGro']].max(axis=1)
@@ -432,8 +374,9 @@ def process_overview(overview):
 
 def get_stress_series_data(session, stresstype):
     """
-    data is pandas.Series with the dev stage as index. stresstype is one among
-    water or nitrogen
+    Returns a bar to be added to the stressplot for the stress type specified.
+    Stress type can be either water or nitrogen. The bar is made considering the 
+    latest simulation run for the session.
     """
     overview = process_overview(session.latest_overview.copy())
     var_column = STRESS_COLUMNS[stresstype]
@@ -444,104 +387,14 @@ def get_stress_series_data(session, stresstype):
     return box.to_dict()
     
 def clear_stress_chart(chart_dict):
+    """
+    NOT IMPLEMENTED, it was part of former stages of the service.
+    """
     chart_dict["userOptions"]["series"] = []
     
-# def init_columnRange_chart(session):
-#     """
-#     Session is needed to get the average yield from adminBase
-#     """
-#     my_chart = Chart()
-#     my_chart.options = HighchartsOptions()
-#     my_chart.options.title = {
-#         'text': 'DSSAT simulated maize yield', 
-#         "style": {
-#             "font-size": "15px"
-#         }
-#     }
-#     my_chart.options.y_axis = {
-#         "title": {
-#             'text': 'Yield (t/ha)', 
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         },
-#         "labels": {
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         },
-#         "plot_lines": [
-#             {
-#                 "value": session.adminBase.validation_run.obs.mean(),
-#                 "color": "#32323232",
-#                 "width": 8,
-#                 "dash_style": "Solid",
-#                 "z_index": 99,
-#                 "label": {
-#                     "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>average</b>",
-#                     "align": "left",
-#                     "style": {"color": "black", "font-size": 13}
-#                 }
-#             },
-#             {
-#                 "value": session.adminBase.validation_run.obs.min(),
-#                 "color": "#32323232",
-#                 "width": 3,
-#                 "dash_style": "Dash",
-#                 "z_index": 99,
-#                 "label": {
-#                     "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>min</b>",
-#                     "align": "left",
-#                     "style": {"color": "black", "font-size": 13}
-#                 }
-#             },
-#             {
-#                 "value": session.adminBase.validation_run.obs.max(),
-#                 "color": "#32323232",
-#                 "width": 3,
-#                 "dash_style": "Dash",
-#                 "z_index": 99,
-#                 "label": {
-#                     "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>max</b>",
-#                     "align": "left",
-#                     "style": {"color": "black", "font-size": 13}
-#                 }
-#             }
-#         ]
-#     }
-#     my_chart.options.x_axis = {
-#         "title": {
-#             'text': 'Experiment', 
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         },
-#         "labels": {
-#             "style": {
-#                 "font-size": "15px",
-#             }
-#         }
-#     }
-#     my_chart.options.tooltip = {
-#         "header_format": '<span style="font-size: 12px; font-weight: bold">{point.key}</span><br/>',
-#         "point_format": '<span style="color:{point.color};font-size: 12px">\u25CF </span>' +\
-#             '<span style="font-size: 12px">{series.name}: {point.y}-{point.high} kg/ha</span><br/>'
-#     }
-#     my_chart.options.legend = Legend(
-#         label_format='<span style="font-size: 12px">{name}</span><br/>'
-#     )
-#     for n, _ in enumerate(Q_RANGE_PLOTS):
-#         my_chart.add_series(
-#             ColumnRangeSeries(
-#                 name=f"Simulated yield ({SERIES_CI[n]}% CI)", 
-#                 color=COLORS[n], grouping=False, border_width=0.
-#             )
-#         )
-#     return my_chart.to_dict()
-
 def init_columnRange_chart(session):
     """
-    Session is needed to get the average yield from adminBase
+    Initializes the yield columnRange chart for the requested session.
     """
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
@@ -636,35 +489,11 @@ def init_columnRange_chart(session):
     my_chart = my_chart.to_dict()
     my_chart["userOptions"]["series"] = []
     return my_chart
-        
-# def get_columnRange_series_data(session):
-#     """
-#     Get the series data for the columnRange chart using the results from the 
-#     latest simulation
-#     """
-#     tmp_df = session.latest_run
-#     tmp_df['year'] = 1
-#     tmp_df["sim"] = tmp_df.HARWT.astype(float)/1000
-    
-#     new_data = {}
-#     for n, q in enumerate(Q_RANGE_PLOTS):
-#         series_name = f"Simulated yield ({SERIES_CI[n]}% CI)"
-#         data = dict(zip(("low", "high"), columnRange_data(tmp_df, q)[0][1:]))
-
-#         label = f"{session.adminBase.cultivar_labels[session.simPars.cultivar]}<br>" + \
-#                 f"Planted on {session.simPars.planting_date.strftime('%b %d %Y')}<br>" + \
-#                 f"{sum(session.simPars.nitrogen_rate):.0f} kg N/ha applied in {len(session.simPars.nitrogen_rate)} events"
-
-#         data["name"] = label
-#         data["x"] = label
-#         new_data[series_name] = data
-#     return new_data
 
 def get_columnRange_series_data(session, series_len):
     """
     Get the series data for the columnRange chart using the results from the 
-    latest simulation.
-    series_len is the current number of series in the chart
+    latest simulation. series_len is the current number of series in the chart
     """
     tmp_df = session.latest_run
     tmp_df['year'] = 1
@@ -722,6 +551,9 @@ def get_columnRange_series_data(session, series_len):
 
 
 def current_forecast_yield_plot(session):
+    """
+    Returns the columnRange yield plot for the latest forecast.
+    """
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
     my_chart.options.title = {
@@ -856,6 +688,9 @@ def current_forecast_yield_plot(session):
     return my_chart
 
 def current_forecast_stress_plot(session):
+    """
+    Returns the stress plot for the latest forecast
+    """
     my_chart = Chart()
     my_chart.options = HighchartsOptions()
     my_chart.options.title = {
