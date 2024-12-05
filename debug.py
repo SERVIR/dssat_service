@@ -140,14 +140,16 @@ def ingest_historical_data():
     
 def ingest_latest_forecast():
     con = pg.connect(dbname=dbname)
-    schema = "zimbabwe"
+    schema = "kenya"
+    suffix = datetime.today().strftime("%Y%m%d")
+    country = schema.title()
     # This piece of code is to upload the latest forecast tables to the db
     # Forecast map
-    file = "/home/dquintero/dssat_service/forecast_data/Zimbabwe/latest_forecast.geojson"
+    file = f"/home/dquintero/dssat_service/forecast_data/{country}/latest_forecast.geojson"
     db.add_latest_forecast(con, schema, file)
     # All simulations results
     results_df = pd.read_csv(
-        "/home/dquintero/dssat_service/forecast_data/Zimbabwe/forecast_20241111.csv"
+        f"/home/dquintero/dssat_service/forecast_data/{country}/forecast_{suffix}.csv"
     )
     db.dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:eQY3_Fwd@localhost:{con.info.port}/{con.info.dbname}",
@@ -158,7 +160,7 @@ def ingest_latest_forecast():
     )
         # Overview file info
     overview_df = pd.read_csv(
-        "/home/dquintero/dssat_service/forecast_data/Zimbabwe/forecast_overview_20241111.csv"
+        f"/home/dquintero/dssat_service/forecast_data/{country}/forecast_overview_{suffix}.csv"
     )
     db.dataframe_to_table(
         f"postgresql+psycopg2://{con.info.user}:eQY3_Fwd@localhost:{con.info.port}/{con.info.dbname}",
@@ -188,14 +190,14 @@ def ingest_nmme_data():
     ing.ingest_nmme_temp(con, schema, ens)
     
 if __name__ == "__main__":
-    con = pg.connect(dbname=dbname)
-    session = Session(
-        AdminBase(con, "kenya", "Uasin Gishu")
-    )
-    plot.init_columnRange_chart(session)
-    # ingest_latest_forecast()
+    # con = pg.connect(dbname=dbname)
+    # session = Session(
+    #     AdminBase(con, "kenya", "Uasin Gishu")
+    # )
+    # plot.init_columnRange_chart(session)
+    ingest_latest_forecast()
     # ingest_historical_data()
     # ingest_cultivars()
     # AdminBase(con, "kenya", "Uasin Gishu")
-    con.close()
+    # con.close()
     exit()
