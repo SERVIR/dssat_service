@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 HARM_VARS = ["constant", "cos1", "sin1", "cos2", "sin2"]
 def add_harmonic_coefs(tmp_df):
+    """
+    Add hamonic coefficients to a weather timeseries. This is needed to estimate
+    solar radiation in NMME forecast data.
+    """
     tmp_df["t"] = np.array([
         int(i.strftime('%j')) 
         for i in tmp_df.index
@@ -48,7 +52,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
     Runs DSSAT in spatial mode for the defined country (schema) and admin
     subdivision (admin1). 
 
-    Arguments
+    Parameters
     ----------
     con: pg.extensions.connection
         pg connection
@@ -78,7 +82,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
     connection: 
         a psycopg2 connection object. It will be used instead of setting new
         conection to dbname
-    **kwargs: 
+    kwargs: 
         kwargs to pass to the GSRun.run function
     """
     # Simulation will start 30 days prior (As sugested by Ines et al., 2013)

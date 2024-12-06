@@ -347,17 +347,18 @@ def add_country(con:pg.extensions.connection, name:str, shapefile:str,
     Add a country to the database. It will create a new schema and all of the 
     tables empty tables it'll need to support the service. The funciton loads
     the shp into the name.admin table, and it simplifies the geometries.
-
-    Arguments
+    
+    Parameters
     ----------
-    con: pg.extensions.connection
-    name: str
-        Name of the country
-    shapefile: str
+    con: pg.extensions.connection 
+    
+    name: str 
+        Name of the country 
+    shapefile: str 
         Path to the shapefile with the administrative divions of the country.
         The shapefile must contain a valid geometry, and at least a "admin_1"
         field to indicate the name of the subdivisions.
-    admin1: str
+    admin1: str 
         Name of the admin1 division.
     """
     gdf = gpd.read_file(shapefile)
@@ -462,7 +463,7 @@ def tiff_to_db(tiffpath:str, con:pg.extensions.connection, schema:str,
     """
     Saves tiff to the database.
 
-    Arguments
+    Parameters
     ----------
     tiffpath: str
         Path to the tiff file

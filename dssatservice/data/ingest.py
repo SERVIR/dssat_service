@@ -79,7 +79,7 @@ def ingest_soil(con:pg.extensions.connection, schema:str, soilfile:str,
     Ingests soil in the database. It will create one row per soil profile. Each
     soil profile will contain a flag for two crop masks.
 
-    Arguments
+    Parameters
     ----------
     con: pg.extensions.connection
         Database connection
@@ -144,7 +144,7 @@ def ingest_static(con:pg.extensions.connection, schema:str, rast:str,
     It is open to include any static data such as crop masks, planting dates, etc.
     It was originally created to ingest TAV and TAMP soil parameters for DSSAT.
 
-    Arguments
+    Parameters
     ----------
     con: pg.extensions.connection
         Dataase connection
@@ -172,11 +172,8 @@ def ingest_static(con:pg.extensions.connection, schema:str, rast:str,
 def ingest_cultivars(con:pg.extensions.connection, schema:str, csv:str):
     """
     Ingest cultivar data. The data to ingest must be in a csv with the next
-    columns: 
-        admin1
-        maturity_type: cultivar maturity type
-        season_length: average season lenght
-        cultivar: DSSAT cultivar code
+    columns: admin1, maturity_type (cultivar maturity type), season_length 
+    (average season lenght), cultivar (DSSAT cultivar code)
     """
     # con = db.connect(dbname)
     cur = con.cursor()
@@ -198,14 +195,7 @@ def ingest_cultivars(con:pg.extensions.connection, schema:str, csv:str):
 def ingest_baseline_pars(con:pg.extensions.connection, schema:str, csv:str):
     """
     NOT IMPLEMENTED, it was part of former stages of the service.
-    Ingest baseline parameters. The data to ingest must be in a csv with the next
-    columns: 
-        admin1
-        cultivar: DSSAT cultivar code
-        nitrogen : nitrogen rate used 
-        planting_month : planting month as integer
-        rpss: Ranked probability skill score
-        crps: Continous ranked probability score
+    Ingest baseline parameters. 
     """
     if not db.table_exists(con, schema, "baseline_pars"):
         db._create_baseline_pars_table(con, schema)
@@ -229,12 +219,7 @@ def ingest_baseline_pars(con:pg.extensions.connection, schema:str, csv:str):
 def ingest_baseline_run(con:pg.extensions.connection, schema:str, csv:str):
     """
     NOT IMPLEMENTED, it was part of former stages of the service.
-    Ingest baseline run. The data to ingest must be in a csv with the next
-    columns: 
-        admin1
-        harwt: dssat yield (t/ha)
-        obs: observed yield for that year (t/ha)
-        year: year
+    Ingest baseline run. 
     """
     if not db.table_exists(con, schema, "baseline_run"):
         db._create_baseline_run_table(con, schema)

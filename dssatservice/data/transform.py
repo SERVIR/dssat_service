@@ -79,7 +79,7 @@ def nc_to_tiff(variable:str, date:datetime, ncpath:str, tiffpath:str=None,
         Path to the netcdf file
     tiffpath: str
         Path to the tiff to write. If None then a tmpfile is created
-    **kwargs:
+    kwargs:
         Other kwargs can be passed. Those kwargs are lat, lon, and time , they 
         map each variable to the netcdf variable that represents each. If not 
         provided then default values from AgERA5 are taken
@@ -144,9 +144,11 @@ def reproject_raster(rin, rout, rref, resampling="bilinear"):
     gdal.Warp(rout, rin, options=warp_options)
     
 def tiff_union(tifflist, tiffout, redf=np.mean, calc="mean(a,axis=0)"):
-    """Takes a list of input tiffs and reduce them to a single raster using
-        the function specified in redf. Rasters must be compatible: same size
-        and resolution"""
+    """
+    Takes a list of input tiffs and reduce them to a single raster using
+    the function specified in redf. Rasters must be compatible: same size
+    and resolution
+    """
     gdal_calc.Calc(calc=calc, a=tifflist, outfile=tiffout)
 
 def db_to_tiff(con:pg.extensions.connection, schema, table, where, saveto):

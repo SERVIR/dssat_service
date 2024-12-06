@@ -28,7 +28,7 @@ def download_era5(date:datetime, variable:str, area:list[float], folder:str=TMP)
     Download era5 data for a single day. It'll download the requested variable. 
     It returns the path to the netCDF file.
 
-    Arguments
+    Parameters
     ----------
     date: datetime.datetime
         Day to download data for
@@ -77,7 +77,7 @@ def download_nmme(variable:str, ens:int, area:list[float], folder:str=None,
     the most recent run. It returns the path to the tiffs files, and list of 
     files.
     
-    Arguments
+    Parameters
     ----------
     variable: str
         Variable to download. One among Precipitation or Temperature
