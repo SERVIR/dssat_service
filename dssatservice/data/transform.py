@@ -158,12 +158,12 @@ def db_to_tiff(con:pg.extensions.connection, schema, table, where, saveto):
     cur = con.cursor()
     user = con.info.user
     password = con.info.password
+    host = con.info.host 
     cur.execute("SELECT current_database()")
     dbname = cur.fetchall()[0][0]
-    # TODO: This won't work when connection to a remote database
     sql_args = \
         f"PG:dbname='{dbname}' user='{user}' password='{password}' " + \
-        f"schema='{schema}' table='{table}' where='{where}' " +\
+        f"schema='{schema}' table='{table}' where='{where}' host='{host}' " +\
         "mode='2'"
     translate_options = gdal.TranslateOptions(format="GTiff")
     gdal.Translate(destName=saveto, srcDS=sql_args, options=translate_options)

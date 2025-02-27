@@ -400,12 +400,12 @@ def add_country(con:pg.extensions.connection, name:str, shapefile:str,
 
     # Create tables
     for var in VARIABLES_ERA5_NC.keys():
-        if not table_exists(dbname, name, f"era5_{var}"):
-            _create_reanalysis_table(dbname, name, f"era5_{var}")
-    if not table_exists(dbname, name, f"soil"):
-        _create_soil_table(dbname, name)
-    if not table_exists(dbname, name, f"cultivars"):
-        _create_cultivars_table(dbname, name)
+        if not table_exists(con, name, f"era5_{var}"):
+            _create_reanalysis_table(con, name, f"era5_{var}")
+    if not table_exists(con, name, f"soil"):
+        _create_soil_table(con, name)
+    if not table_exists(con, name, f"cultivars"):
+        _create_cultivars_table(con, name)
     cur.close()
     # con.close()
     return
@@ -904,17 +904,23 @@ def add_latest_forecast(con:pg.extensions.connection, schema:str, geojson:str):
     tmp_dir.cleanup()
     return
 
-def dataframe_to_table(connectionstr, df, schema, table, index_label):
+def dataframe_to_table(con:pg.extensions.connection, df, schema, table, index_label):
     """
     Uploads a dataframe to the database. It is used to upload the latest forecast
     results.
     """
+    if con.info.host == '/var/run/postgresql':
+        host = 'localhost'
+    else:
+        host = con.info.host
+    connectionstr = f"postgresql+psycopg2://{con.info.user}:{con.info.password}@{host}:{con.info.port}/{con.info.dbname}"
     engine = create_engine(connectionstr)
     df = df.set_index(index_label)
     df.to_sql(
         name=table, schema=schema, con=engine, 
         if_exists="replace", index=True, index_label=index_label
     )
+    engine.dispose()
     
 def fetch_forecast_tables(con, schema, admin1):
     """

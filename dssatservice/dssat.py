@@ -165,9 +165,12 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
             end_date = latest_forecast_weather
             # Get latest year of past weather. That year is used to train a 
             # KNN estimator for srad
+            start_past_forecast = min(
+                latest_past_weather - timedelta(365), start_date
+            )
             past_weather_df = db.get_era5_for_point(
                 con, schema, weather[0], weather[1], 
-                latest_past_weather - timedelta(365), latest_past_weather
+                start_past_forecast, latest_past_weather
             )
             ens = np.random.randint(1, 11)
             future_weather_df = db.get_nmme_for_point(
@@ -304,7 +307,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
     )
     tmp_dir.cleanup()
     if (out.MAT == "-99").mean() > .5:
-        logger.warn(
+        logger.warning(
             "Most of the simulations were terminated before reaching maturity. "
             "It is likely that the available weather data was not long enough "
             "to complete the simulation."
