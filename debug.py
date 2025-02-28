@@ -5,23 +5,15 @@ as how the dssatservice package is used to setup and operate the service.
 Some functions are examples of basic setup funcionalities like: adding a new 
 domain, adding the soil data, adding the cultivars information, etc.
 """
-import dssatservice.data.download as dwn
 import dssatservice.data.ingest as ing
 import dssatservice.database as db
-from dssatservice.ui.base import (
-    admin_list, AdminBase, Session
-)
-from dssatservice.ui import plot
-import dssatservice.data.transform as tr
 from dssatservice.dssat import run_spatial_dssat
 from datetime import datetime
 import psycopg2 as pg
 
-import os
 import time
 import numpy as np
 import re
-import pandas as pd
 
 INPUT_PATH = "/home/diego/dssat_service_data"
 with open('psswd', 'r') as f:
@@ -29,10 +21,17 @@ with open('psswd', 'r') as f:
 con = pg.connect(dbname="dssatserv", password=psswd, user='diego', host='localhost')
 
 def add_country():
+    """
+    Adds a new domain to the service database
+    """
     shp = f"{INPUT_PATH}/rwanda_admin1/rwa_adm1.shp"
     db.add_country(con, "Rwanda", shp, "NAME_1")
 
 def ingest_soil_data():
+    """
+    Ingest the Soil data for the domain. ALl soil profiles to be ingested must
+    be in the same Soil DSSAT file.
+    """
     soil_path = f"{INPUT_PATH}/RW.SOL"
     mask1 = f"{INPUT_PATH}/subsaharanAfrica-maize.tif"
     mask2 = f"{INPUT_PATH}/subsaharanAfrica-suitableAg-v2.tif"
@@ -45,6 +44,10 @@ def ingest_soil_data():
     )
 
 def ingest_static_data():
+    """
+    Ingest static data. In this exmple two DSSAT weather parameters are ingested:
+    Average temperature (TAV), and Average seasonal temperature range (TAMP).
+    """
     ing.ingest_static(
         con=con,
         schema="rwanda",
@@ -59,6 +62,9 @@ def ingest_static_data():
     )
 
 def ingest_era5_data():
+    """
+    Ingests the ERA5 data
+    """
     ing.ingest_era5_series(
         con, "rwanda", 
         datetime(2024, 1, 1), 
@@ -67,6 +73,9 @@ def ingest_era5_data():
     con.close()
 
 def run_model():
+    """
+    Runs a end-of-season simulation (using only ERA5 historical data)
+    """
     time0 = time.time()
     df, overview = run_spatial_dssat(
         con=con, 
@@ -91,16 +100,28 @@ def run_model():
     con.close()
 
 def era5_climatology():
+    """
+    Creates the ERA5 climatology table. It estimates the monthly stats using
+    all the ERA5 data available in the database.
+    """
     ing.calculate_climatology(con, 'rwanda')
 
 def ingest_cultivars():
+    """
+    Ingest the cultivar options. These cultivars are the ones avaible for the 
+    user selection. 
+    """
     ing.ingest_cultivars(con, "rwanda", f"{INPUT_PATH}/cultivar_table.csv")
 
 def ingest_nmme_data():
+    """
+    Ingest the NMME climate prediction data.
+    """
     ing.ingest_nmme(con, 'rwanda')
 
 def run_model_forecast_onthefly():
     """
+    Runs a in-season simulation (Using future weather data from NMME).
     This is just running the model as one user would do it by getting NMME data.
     It is not the function to run the operative forecast!!!
     """
@@ -132,10 +153,9 @@ if __name__ == "__main__":
     # ingest_soil_data()
     # ingest_static_data()
     # ingest_era5_data()
-    # run_model()
+    # run_model() # Run only end-of-season (no climate forecast)
     # era5_climatology()
     # ingest_cultivars()
     # ingest_nmme_data()
-    # run_model_forecast_onthefly()
-    
+    # run_model_forecast_onthefly() # Run in-season (with climate forecast)
     con.close()

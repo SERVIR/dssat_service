@@ -439,7 +439,7 @@ def init_columnRange_chart(session):
                     "dash_style": "Solid",
                     "z_index": 99,
                     "label": {
-                        "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>average</b>",
+                        "text": f"<b>{ADMIN_NAMES.get(session.adminBase.schema)}<br/>average</b>",
                         "align": "left",
                         "style": {"color": "black", "font-size": 13}
                     }
@@ -451,7 +451,7 @@ def init_columnRange_chart(session):
                     "dash_style": "Dash",
                     "z_index": 99,
                     "label": {
-                        "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>min</b>",
+                        "text": f"<b>{ADMIN_NAMES.get(session.adminBase.schema)}<br/>min</b>",
                         "align": "left",
                         "style": {"color": "black", "font-size": 13}
                     }
@@ -463,7 +463,7 @@ def init_columnRange_chart(session):
                     "dash_style": "Dash",
                     "z_index": 99,
                     "label": {
-                        "text": f"<b>{ADMIN_NAMES[session.adminBase.schema]}<br/>max</b>",
+                        "text": f"<b>{ADMIN_NAMES.get(session.adminBase.schema)}<br/>max</b>",
                         "align": "left",
                         "style": {"color": "black", "font-size": 13}
                     }
