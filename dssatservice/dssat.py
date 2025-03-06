@@ -46,7 +46,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
                       all_random:bool=True, overview:bool=False,
-                      return_input=False,
+                      return_input=False, weather_table='era5',
                       **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
@@ -82,6 +82,8 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
     connection: 
         a psycopg2 connection object. It will be used instead of setting new
         conection to dbname
+    weather_table: str
+        Weather table to get the data from. Default is ERA5
     kwargs: 
         kwargs to pass to the GSRun.run function
     """
@@ -92,17 +94,24 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
     db.check_admin1_in_country(con, schema, admin1)
     # Get soils and verify a minimum number of pixel samples
     soils = db.get_soils(con, schema, admin1, 1)
+    # Assign weather retrieval function
+    if weather_table == 'era5':
+        get_weather_for_point = db.get_era5_for_point
+    elif weather_table == 'prism':
+        get_weather_for_point = db.get_prism_for_point
+    else:
+        raise NameError(f'{weather_table} tables not in database')
     # Get weather pixels
     query = """
         WITH pts As ( 
         SELECT (ST_PixelAsCentroids(ST_Clip(wt.rast, ad.geom))).geom as geom
-        FROM {0}.era5_rain as wt, {0}.admin as ad
+        FROM {0}.{1}_rain as wt, {0}.admin as ad
         WHERE 
             fdate=%s
         AND ad.admin1=%s
         )  
         SELECT ST_X(geom), ST_Y(geom) FROM pts;
-        """.format(schema)
+        """.format(schema, weather_table)
     cur = con.cursor()
     cur.execute(query, (start_date, admin1,))
     rows = cur.fetchall()
@@ -154,9 +163,9 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
         
         # Get weather
         # Verify that all the series are available from past weather
-        latest_past_weather = db.latest_date(con, schema, "era5_rain")
+        latest_past_weather = db.latest_date(con, schema, f"{weather_table}_rain")
         if latest_past_weather >= end_date: # End of season
-            weather_df = db.get_era5_for_point(
+            weather_df = get_weather_for_point(
                 con, schema, weather[0], weather[1], 
                 start_date, end_date
             )
@@ -168,7 +177,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
             start_past_forecast = min(
                 latest_past_weather - timedelta(365), start_date
             )
-            past_weather_df = db.get_era5_for_point(
+            past_weather_df = get_weather_for_point(
                 con, schema, weather[0], weather[1], 
                 start_past_forecast, latest_past_weather
             )

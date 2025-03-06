@@ -11,6 +11,8 @@ import climateserv.api
 from datetime import datetime, timedelta
 import requests
 from . import transform
+import dssatservice.database as db
+from ftplib import FTP
 
 TMP = tempfile.gettempdir()
 
@@ -22,6 +24,7 @@ VARIABLES_ERA5_API = {
     "tdew": ("2m_dewpoint_temperature", "24_hour_mean"),
     "wind": ("10m_wind_speed", "24_hour_mean")
 }
+VARIABLES_PRISM = db.VARIABLES_PRISM
 
 def download_era5(date:datetime, variable:str, area:list[float], folder:str=TMP):
     """
@@ -131,4 +134,22 @@ def download_nmme(variable:str, ens:int, area:list[float], folder:str=None,
                 )
     os.remove(zip_path)      
     return folder, files
-     
+
+def download_prism(ftp:FTP, filename:str, folder:str=TMP):
+    """
+    Download prism data for a single day. It'll download the requested variable. 
+    It returns the path to the tif file.
+
+    Parameters
+    ----------
+    ftp: ftplib.FTP
+        FTP object. 
+    filename: str
+        Filename in the ftp cwd
+    folder: str
+        Folder where the netCDF file will be saved. Default to /tmp folder
+    """
+    filepath = f"{folder}/{filename}"
+    with open(filepath, 'wb') as f:
+        ftp.retrbinary(f"RETR {filename}", f.write)
+    return filepath

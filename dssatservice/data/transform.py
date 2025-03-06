@@ -128,21 +128,37 @@ def parse_overview(overview_str):
     df = pd.DataFrame(lines, columns=["RUN"]+list(ENV_STRESS_COLNAMES))
     return df  
 
-def reproject_raster(rin, rout, rref, resampling="bilinear"):
+def reproject_raster(rin, rout, rref=None, resampling="bilinear", **kwargs):
     """
     Reprojects the rin to rout using rref as reference for extent and resolution.
-    """ 
-    ref_ds = gdal.Open(rref)
-    x_size, y_size = ref_ds.RasterXSize, ref_ds.RasterYSize
-    x_min, dx, _, y_max, _, dy = ref_ds.GetGeoTransform()
-    x_max = x_min + dx*x_size
-    y_min = y_max + dy*y_size
+    If a reference raster is not passed, then the shape and geotransform parameters
+    must be passed.
+    """
+    if rref:
+        ref_ds = gdal.Open(rref)
+        x_size, y_size = ref_ds.RasterXSize, ref_ds.RasterYSize
+        x_min, dx, _, y_max, _, dy = ref_ds.GetGeoTransform()
+        x_max = x_min + dx*x_size
+        y_min = y_max + dy*y_size
+    else:
+        x_size, y_size = kwargs["shape"]
+        x_min, dx, _, y_max, _, dy = kwargs["geotransform"]
+        x_max = x_min + dx*x_size
+        y_min = y_max + dy*y_size
     warp_options = gdal.WarpOptions(
         format="GTiff", outputBounds=(x_min, y_min, x_max, y_max),
         width=x_size, height=y_size, resampleAlg=resampling
     )
     gdal.Warp(rout, rin, options=warp_options)
-    
+
+def translate_raster(rin, rou, bbox):
+    translate_options = gdal.TranslateOptions(
+        projWin=[bbox[1], bbox[0], bbox[3], bbox[2]], 
+        projWinSRS='EPSG:4326'
+    )
+    gdal.Translate(rou, rin, options=translate_options)
+
+
 def tiff_union(tifflist, tiffout, redf=np.mean, calc="mean(a,axis=0)"):
     """
     Takes a list of input tiffs and reduce them to a single raster using

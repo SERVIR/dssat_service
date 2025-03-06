@@ -70,7 +70,6 @@ def ingest_era5_data():
         datetime(2024, 1, 1), 
         datetime(2025, 3, 1)
     )
-    con.close()
 
 def run_model():
     """
@@ -97,7 +96,6 @@ def run_model():
     ]
     print(np.mean(N_uptake), np.std(N_uptake))
     print(f"{(time.time() - time0):.3f} seconds running one season")
-    con.close()
 
 def era5_climatology():
     """
@@ -147,7 +145,8 @@ def run_model_forecast_onthefly():
     ]
     print(np.mean(N_uptake), np.std(N_uptake))
     print(f"{(time.time() - time0):.3f} seconds running one season")
-    
+
+from dssatservice.data import download as dwn
 if __name__ == "__main__":
     # add_country()
     # ingest_soil_data()

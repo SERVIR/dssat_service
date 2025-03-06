@@ -18,9 +18,12 @@ import rasterio as rio
 import pandas as pd
 import numpy as np
 import logging
-
+from ftplib import FTP
+import zipfile
+import tempfile
 
 VARIABLES_ERA5_NC = db.VARIABLES_ERA5_NC
+VARIABLES_PRISM = db.VARIABLES_PRISM
 
 def ingest_era5_record(con:pg.extensions.connection, schema:str, date:datetime):
     """
@@ -46,6 +49,7 @@ def ingest_era5_record(con:pg.extensions.connection, schema:str, date:datetime):
             table = f"era5_{var}"
             # Delete rasters if exists
             db.delete_rasters(con, schema, table, date)
+
             db.tiff_to_db(tiff_path, con, schema, table, date)
             os.remove(nc_path)
             os.remove(tiff_path)
@@ -467,7 +471,95 @@ def calculate_climatology(con:pg.extensions.connection, schema:str):
         print(f"trange_range {month} row created")
     cur.close()
     con.close()
-            
-        
-        
-    
+
+
+def ingest_prism_series(con:pg.extensions.connection, 
+                       schema:str, datefrom:datetime, dateto:datetime):
+    """
+    Ingest PRISM data for the requested schema, from the specified to the specified
+    dates. It ingests all four PRISM variables needed to run the model. PRISM does 
+    not have solar radiation data, then ERA5 SRAD data is ingested.
+    """
+    schema = schema.lower()
+    # Check admin shapefile is in the db
+    assert db.table_exists(con, schema, "admin"), \
+        f"{schema}.admin does not exists. Make sure to add it using " +\
+        "the add_country function"
+    for var in VARIABLES_PRISM.keys():
+        if not db.table_exists(con, schema, f"prism_{var}"):
+            db._create_reanalysis_table(con, schema, f"prism_{var}")
+    # Get the envelope for that region
+    bbox = db.get_envelope(con, schema)
+    logger = logging.getLogger(__name__)
+
+    url = "prism.oregonstate.edu"
+    ftp = FTP(url)
+    ftp.login()
+
+    # Map all dates to their files
+    date_range = pd.date_range(datefrom, dateto)
+    years = set([d.year for d in date_range])
+
+    url_map = {}
+    for var, pvar in VARIABLES_PRISM.items():
+        url_map[var] = []
+        for year in years:
+            ftp.cwd(f"daily/{pvar}/{year}")
+            url_map[var] += ftp.nlst()
+            ftp.cwd(f"../../../")
+        url_map[var] = {
+            i.split('_')[-2]: f"{i}" 
+            for i in url_map[var]
+        }
+    download_srad = True
+    for date in date_range: 
+        for var, pvar in VARIABLES_PRISM.items():
+            ftp.cwd(f'daily/{pvar}/{date.year}/')
+            filename = url_map[var].get(date.strftime('%Y%m%d'))
+            tmpfolder = tempfile.mkdtemp()
+            if not filename:
+                logger.info(
+                    f"\nPRISM INGEST: {date.date()} {pvar} for {schema} failed. " +\
+                    "There is no data matching the request.\n"
+                )
+                download_srad = False
+            else:
+                file_path = download.download_prism(ftp, filename, tmpfolder)
+                if file_path.endswith("zip"):
+                    fz = zipfile.ZipFile(file_path)
+                    bil_path = filter(
+                        lambda s: s.endswith("bil"), fz.namelist()
+                    ).__next__()
+                    bil_path = os.path.join(tmpfolder, bil_path)
+                    fz.extractall(tmpfolder)
+                else:
+                    bil_path = file_path
+                tiff_path = bil_path.replace('.bil', '.tif')
+                # Translate raster
+                transform.translate_raster(bil_path, tiff_path, bbox)
+                # Delete rasters if exists
+                table = f"prism_{var}"
+                db.delete_rasters(con, schema, table, date)
+                db.tiff_to_db(tiff_path, con, schema, table, date)
+                shutil.rmtree(tmpfolder)
+                logger.info(
+                    f"\nPRISM INGEST: {date.date()} {pvar} for {schema} ingested\n"
+                )
+                print(f"\nPRISM INGEST: {date.date()} {pvar} for {schema} ingested\n")
+                download_srad = True
+            ftp.cwd(f'../../../')
+        if download_srad:
+            nc_path = download.download_era5(date, 'srad', bbox)
+            tiff_path = transform.nc_to_tiff(
+                VARIABLES_ERA5_NC['srad'], date, nc_path
+            )
+            table = f"prism_srad"
+            # Delete rasters if exists
+            db.delete_rasters(con, schema, table, date)
+            db.tiff_to_db(tiff_path, con, schema, table, date)
+            logger.info(
+                f"\nPRISM INGEST: {date.date()} {pvar} for {schema} ingested\n"
+            )
+            os.remove(nc_path)
+            os.remove(tiff_path)
+    ftp.close()

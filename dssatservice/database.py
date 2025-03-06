@@ -25,6 +25,9 @@ VARIABLES_ERA5_NC = {
     # "wind": "Wind_Speed_10m_Mean",
     # "tdew": "Dew_Point_Temperature_2m_Mean"   
 }
+VARIABLES_PRISM = {
+    'rain': 'ppt', 'tmax': 'tmax', 'tmin': 'tmin',
+}
 
 TMP = tempfile.gettempdir()
 
@@ -644,13 +647,8 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
         assert len(dates_notin_db) == 0, \
             f"Dates are missing in {table}: {dates_notin_db}. Ingest that data first"
     
-    # Get rain data. This will also get the rid to make next queries using 
-    # rid instead of spatial relations
     variables = list(VARIABLES_ERA5_NC.keys())
-    var = variables[0]
-
     cur = con.cursor()
-    import time
     df = DataFrame()
     for var in variables:
         query = """
@@ -672,6 +670,51 @@ def get_era5_for_point(con, schema:str, lon:float, lat:float,
         df[var] = Series(rows[:, 1], index=rows[:, 0])
     
     cur.close()
+    if df.isna().any().any():
+        warnings.warn(f"Data is NULL at location {lon}, {lat}")
+        return
+    return df.sort_index()
+
+def get_prism_for_point(con, schema:str, lon:float, lat:float,
+                       datefrom:datetime, dateto:datetime):
+    """
+    Get the EAR5 weather series for the requested point and time period. It 
+    returns a df with the time series for that point.
+    """
+    for var in VARIABLES_PRISM.keys():
+        table = f"prism_{var}"
+        dates_notin_db = verify_series_continuity(
+            con, schema, table, datefrom, dateto
+        )
+        assert len(dates_notin_db) == 0, \
+            f"Dates are missing in {table}: {dates_notin_db}. Ingest that data first"
+    
+    variables = list(VARIABLES_PRISM.keys())
+    cur = con.cursor()
+    df = DataFrame()
+    for var in variables:
+        query = """
+        SELECT fdate, ST_value(ra.rast, pn.pt_geom) AS val
+        FROM {0}.prism_{1} AS ra,
+            (
+                SELECT ST_SetSRID(ST_Point({2}, {3}), 4326) AS pt_geom
+            ) AS pn
+        WHERE
+            ST_Within(pn.pt_geom, ST_Envelope(rast))
+            AND fdate>=date '{4}' AND fdate<=date '{5}'
+        """.format(schema, var, lon, lat, datefrom.strftime("%Y-%m-%d"),
+                   dateto.strftime("%Y-%m-%d"))
+        cur.execute(query)
+        rows = np.array(cur.fetchall())
+        if len(rows) < 1:
+            warnings.warn(f"{var} data is NULL at location {lon}, {lat}")
+            continue
+        df[var] = Series(rows[:, 1], index=rows[:, 0])
+    
+    cur.close()
+    # Temperature to Kelvin (match ERA5 units)
+    df['tmax'] += 273.15
+    df['tmin'] += 273.15
     if df.isna().any().any():
         warnings.warn(f"Data is NULL at location {lon}, {lat}")
         return
