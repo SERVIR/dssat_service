@@ -501,6 +501,8 @@ def ingest_prism_series(con:pg.extensions.connection,
     for var in VARIABLES_PRISM.keys():
         if not db.table_exists(con, schema, f"prism_{var}"):
             db._create_reanalysis_table(con, schema, f"prism_{var}")
+    if not db.table_exists(con, schema, f"prism_srad"):
+        db._create_reanalysis_table(con, schema, f"prism_srad")
     # Get the envelope for that region
     bbox = db.get_envelope(con, schema)
     logger = logging.getLogger(__name__)
