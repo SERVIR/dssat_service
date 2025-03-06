@@ -410,7 +410,7 @@ def calculate_climatology(con:pg.extensions.connection, schema:str,
     table = f"{weather_table}_clim"
     assert not db.table_exists(con, schema, table), \
         f"{schema}.{table} exists. Drop the table before running this function  "
-    db._create_climatology_table(con, schema)
+    db._create_climatology_table(con, schema, weather_table)
     ds = weather_table
     months = range(1, 13)
     cur = con.cursor()
