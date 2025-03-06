@@ -146,7 +146,6 @@ def run_model_forecast_onthefly():
     print(np.mean(N_uptake), np.std(N_uptake))
     print(f"{(time.time() - time0):.3f} seconds running one season")
 
-from dssatservice.data import download as dwn
 if __name__ == "__main__":
     # add_country()
     # ingest_soil_data()

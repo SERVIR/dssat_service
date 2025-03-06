@@ -278,11 +278,11 @@ def _create_baseline_run_table(con, schema):
     # con.close()
     return
 
-def _create_climatology_table(con, schema):
+def _create_climatology_table(con, schema, weather_table='era5'):
     """
     Creates a table for the monthly climatology.
     """
-    ds = "era5"
+    ds = weather_table
     # con = connect(dbname)
     cur = con.cursor()
     query = """

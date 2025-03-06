@@ -78,7 +78,7 @@ def ingest_era5_series(con:pg.extensions.connection,
         date += timedelta(days=1)
 
 def ingest_soil(con:pg.extensions.connection, schema:str, soilfile:str, 
-                mask1:str, mask2:str):
+                mask1:str=None, mask2:str=None):
     """
     Ingests soil in the database. It will create one row per soil profile. Each
     soil profile will contain a flag for two crop masks.
@@ -98,8 +98,10 @@ def ingest_soil(con:pg.extensions.connection, schema:str, soilfile:str,
     """
     with open(soilfile, "r") as f:
         soil_lines = f.readlines()
-    ds_mask1 = rio.open(mask1)
-    ds_mask2 = rio.open(mask2)
+    if mask1:
+        ds_mask1 = rio.open(mask1)
+    if mask2:
+        ds_mask2 = rio.open(mask2)
 
     allProfile = False
     soilProfile_lines = []
@@ -122,10 +124,16 @@ def ingest_soil(con:pg.extensions.connection, schema:str, soilfile:str,
 
         if allProfile:
             lat, lon = map(float, soilProfile_lines[2][25:42].split())
-            mask1_value = ds_mask1.sample([(lon, lat)]).__next__()
-            mask1_value = repr(any(mask1_value)).upper()
-            mask2_value = ds_mask2.sample([(lon, lat)]).__next__()
-            mask2_value = repr(any(mask2_value)).upper()
+            if mask1:
+                mask1_value = ds_mask1.sample([(lon, lat)]).__next__()
+                mask1_value = repr(any(mask1_value)).upper()
+            else: 
+                mask1_value = 'TRUE'
+            if mask2:
+                mask2_value = ds_mask2.sample([(lon, lat)]).__next__()
+                mask2_value = repr(any(mask2_value)).upper()
+            else:
+                mask2_value = 'TRUE'
             # TODO: Raise if the point is not in crop mask
             soilProfile_lines = "".join(soilProfile_lines)
             # Write to DB
@@ -244,7 +252,8 @@ def ingest_baseline_run(con:pg.extensions.connection, schema:str, csv:str):
         con.commit()
     cur.close()
         
-def ingest_nmme_rain(con:pg.extensions.connection, schema:str, ens:int):
+def ingest_nmme_rain(con:pg.extensions.connection, schema:str, ens:int,
+                     weather_table:str='era5'):
     """
     Ingest the NMME rain data
     """
@@ -257,7 +266,7 @@ def ingest_nmme_rain(con:pg.extensions.connection, schema:str, ens:int):
     # Get the reference geotransform raster from the climatology raster
     where = f"\"month\"=1 AND variable=\\'tmean_mean\\'"
     ref_rast = "/tmp/refrast.tiff"
-    transform.db_to_tiff(con, schema, "era5_clim", where, ref_rast)
+    transform.db_to_tiff(con, schema, f"{weather_table}_clim", where, ref_rast)
     
     # Download forecast
     variable = "Precipitation"
@@ -282,11 +291,13 @@ def ingest_nmme_rain(con:pg.extensions.connection, schema:str, ens:int):
         )         
     shutil.rmtree(folder)
 
-def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
+def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int,
+                     weather_table:str='era5'):
     """
     Ingest nmme temperature data. For that it conducts the next steps:
         1. Download and geotransform nmme data
-        2. Calculate monthly bias based on the climatology in era5_clim table
+        2. Calculate monthly bias based on the climatology in weather_table 
+         climatology table
         3. Adjust daily Tmean series using the monthly bias
         4. Estimates Tmax and Tmean using the monthly average Trange.
         5. Saves Tmax and Tmin in the DB
@@ -302,7 +313,7 @@ def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
     # Get the reference geotransform raster from the climatology raster
     where = f"\"month\"=1 AND variable=\\'tmean_mean\\'"
     ref_rast = "/tmp/refrast.tiff"
-    transform.db_to_tiff(con, schema, "era5_clim", where, ref_rast)
+    transform.db_to_tiff(con, schema, f"{weather_table}_clim", where, ref_rast)
     
     # Download forecast
     variable = "Temperature"
@@ -328,7 +339,7 @@ def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
         # Climatology monthly average
         ref_rast = "/tmp/refrast.tiff"
         where = f"\"month\"={month} AND variable=\\'tmean_mean\\'"
-        transform.db_to_tiff(con, schema, "era5_clim", where, ref_rast)
+        transform.db_to_tiff(con, schema, f"{weather_table}_clim", where, ref_rast)
         # Monthly bias
         bias_path = os.path.join(folder, f"bias{month}.tiff")
         transform.rast_calc(
@@ -341,7 +352,7 @@ def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
     for month in months:
         trange_path = "/tmp/tmprast_trange.tiff"
         where = f"\"month\"={month} AND variable=\\'trange_mean\\'"
-        transform.db_to_tiff(con, schema, "era5_clim", where, trange_path)
+        transform.db_to_tiff(con, schema, f"{weather_table}_clim", where, trange_path)
         files_month = {
             d: f for d, f in files_dict.items()
             if d.month == month
@@ -381,24 +392,26 @@ def ingest_nmme_temp(con:pg.extensions.connection, schema:str, ens:int):
             )         
     shutil.rmtree(folder)
     
-def ingest_nmme(con:pg.extensions.connection, schema:str):
+def ingest_nmme(con:pg.extensions.connection, schema:str, 
+                weather_table:str="era5"):
     """
     Ingest the NMME Rain and temperature data
     """
     for e in range(1, 11):
-        ingest_nmme_temp(con, schema, e)
-        ingest_nmme_rain(con, schema, e)
+        ingest_nmme_temp(con, schema, e, weather_table)
+        ingest_nmme_rain(con, schema, e, weather_table)
 
-def calculate_climatology(con:pg.extensions.connection, schema:str):
+def calculate_climatology(con:pg.extensions.connection, schema:str, 
+                          weather_table:str='era5'):
     """
     It calculates and ingests the climatology using the available reanalysis 
-    data in the ERA5 tables.
+    data in the Weather tables.
     """
-    table = "era5_clim"
+    table = f"{weather_table}_clim"
     assert not db.table_exists(con, schema, table), \
         f"{schema}.{table} exists. Drop the table before running this function  "
     db._create_climatology_table(con, schema)
-    ds = "era5"
+    ds = weather_table
     months = range(1, 13)
     cur = con.cursor()
     variables = ["tmax", "tmin"]
@@ -442,15 +455,15 @@ def calculate_climatology(con:pg.extensions.connection, schema:str):
         rast_query = """
             -- Time series of temperature range for that month
             WITH merged As (
-                SELECT * FROM {0}.era5_tmax
+                SELECT * FROM {0}.{2}_tmax
                     WHERE date_part('month', fdate)={1}
                 UNION ALL
-                (SELECT * FROM {0}.era5_tmin
+                (SELECT * FROM {0}.{2}_tmin
                     WHERE date_part('month', fdate)={1})
             )
             SELECT fdate, ST_Union(rast, 'RANGE') as rast FROM merged
             GROUP BY fdate
-        """.format(schema, month)
+        """.format(schema, month, ds)
         sql = """
             WITH Trange As ({4})
             INSERT INTO {0}.{1} ("month", variable, rast)(  

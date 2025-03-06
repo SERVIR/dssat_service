@@ -46,7 +46,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
                       plantingdate:datetime, cultivar:str,
                       nitrogen:list[tuple], nens:int=50, 
                       all_random:bool=True, overview:bool=False,
-                      return_input=False, weather_table='era5',
+                      return_input=False, weather_table:str='era5',
                       **kwargs):
     """
     Runs DSSAT in spatial mode for the defined country (schema) and admin
@@ -83,7 +83,7 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
         a psycopg2 connection object. It will be used instead of setting new
         conection to dbname
     weather_table: str
-        Weather table to get the data from. Default is ERA5
+        Weather table to get the data from. Default is era5
     kwargs: 
         kwargs to pass to the GSRun.run function
     """
