@@ -136,16 +136,22 @@ def ingest_soil(con:pg.extensions.connection, schema:str, soilfile:str,
                 mask2_value = 'TRUE'
             # TODO: Raise if the point is not in crop mask
             soilProfile_lines = "".join(soilProfile_lines)
+            soilProfile_lines = soilProfile_lines.replace("'", " ")
             # Write to DB
-            query = """
-                INSERT INTO {0}.soil(geom, mask1, mask2, soil) 
-                VALUES (ST_Point({1}, {2}), {3}, {4}, '{5}');
-                """.format(schema, lon, lat, mask1_value, mask2_value, 
-                           soilProfile_lines)
-            cur.execute(query)
-            con.commit()
-            allProfile = False
-            soilProfile_lines = [line]
+            try:
+                query = """
+                    INSERT INTO {0}.soil(geom, mask1, mask2, soil) 
+                    VALUES (ST_Point({1}, {2}), {3}, {4}, '{5}');
+                    """.format(schema, lon, lat, mask1_value, mask2_value, 
+                            soilProfile_lines)
+                cur.execute(query)
+                con.commit()
+            except pg.errors.UniqueViolation: # If soil for that location is repeated
+                con.rollback()
+                continue
+            finally:
+                allProfile = False
+                soilProfile_lines = [line]
     cur.close()
     # con.close()
 
@@ -420,11 +426,15 @@ def calculate_climatology(con:pg.extensions.connection, schema:str,
             table = f"{ds}_{var}"
             agg = 'mean'
             variable = f"{var}_{agg}"
+            if weather_table == 'prism': # Prism is in celsius 
+                rast_str = "ST_MapAlgebra(rast, NULL, '([rast]+273.15)')"
+            else:
+                rast_str = 'rast'
             rast_query = """
-                SELECT ST_Union(rast, '{3}') as rast FROM {0}.{1}
+                SELECT ST_Union({4}, '{3}') as rast FROM {0}.{1}
                 WHERE
                     date_part('month', fdate)={2}
-            """.format(schema, table, month, agg.upper())
+            """.format(schema, table, month, agg.upper(), rast_str)
             sql = """
                 WITH agg As ({4})
                 INSERT INTO {0}.{1} ("month", variable, rast)(
