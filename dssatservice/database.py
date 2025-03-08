@@ -380,7 +380,7 @@ def add_country(con:pg.extensions.connection, name:str, shapefile:str,
     cur = con.cursor()
     cur.execute("SELECT current_database()")
     dbname = cur.fetchall()[0][0]
-    cmd = f"shp2pgsql -d -s 4326 {tmp_shp} {name}.admin | psql -d {dbname}"      # TODO: This won't work when there is a remote connection. 
+    cmd = f"shp2pgsql -d -s 4326 {tmp_shp} {name}.admin | psql -d {dbname} -p {con.info.port}"  
     proc = subprocess.Popen(
         cmd, shell=True, stdout=subprocess.PIPE, 
         stderr=subprocess.STDOUT
@@ -689,7 +689,7 @@ def get_prism_for_point(con, schema:str, lon:float, lat:float,
         assert len(dates_notin_db) == 0, \
             f"Dates are missing in {table}: {dates_notin_db}. Ingest that data first"
     
-    variables = list(VARIABLES_PRISM.keys())
+    variables = list(VARIABLES_PRISM.keys()) + ["srad"]
     cur = con.cursor()
     df = DataFrame()
     for var in variables:
