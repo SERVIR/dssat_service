@@ -23,7 +23,7 @@ from sklearn.neighbors import KNeighborsRegressor
 
 MIN_SAMPLES = 4
 # MAX_SIM_LENGTH = 8*30  
-MAX_SIM_LENGTH = 360 # This is maximum simulation lenght since planting.
+MAX_SIM_LENGTH = 270 # This is maximum simulation lenght since planting.
 logger = logging.getLogger(__name__)
 
 HARM_VARS = ["constant", "cos1", "sin1", "cos2", "sin2"]
@@ -169,6 +169,8 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
                 con, schema, weather[0], weather[1], 
                 start_date, end_date
             )
+            if weather_df is None:
+                continue
         else: # Forecast
             latest_forecast_weather = db.latest_date(con, schema, "nmme_rain")
             end_date = latest_forecast_weather
@@ -181,11 +183,15 @@ def run_spatial_dssat(con:pg.extensions.connection, schema:str, admin1:str,
                 con, schema, weather[0], weather[1], 
                 start_past_forecast, latest_past_weather
             )
+            if past_weather_df is None:
+                continue
             ens = np.random.randint(1, 11)
             future_weather_df = db.get_nmme_for_point(
                 con, schema, weather[0], weather[1], 
                 latest_past_weather, end_date, ens
-            )            
+            )    
+            if future_weather_df is None:
+                continue        
             # Estimate forecast srad
             # Adjust a harmonic model to past srad
             add_harmonic_coefs(past_weather_df)          
