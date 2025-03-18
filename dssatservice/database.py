@@ -715,6 +715,8 @@ def get_prism_for_point(con, schema:str, lon:float, lat:float,
     # Temperature to Kelvin (match ERA5 units)
     df['tmax'] += 273.15
     df['tmin'] += 273.15
+    # SRAD is from ERA5, so it might not be available
+    df['srad'] = df.srad.ffill()
     if df.isna().any().any():
         warnings.warn(f"Data is NULL at location {lon}, {lat}")
         return
