@@ -217,7 +217,8 @@ class Session:
             sim_controls["IMDEP"] = 30
             sim_controls["ITHRL"] = 50
             sim_controls["ITHRU"] = 100
-            
+        
+        weather_table = kwargs.get('weather_table', 'era5')
         df, overview = run_spatial_dssat(
             dbname="", 
             con=self.adminBase.connection,
@@ -228,7 +229,8 @@ class Session:
             nitrogen=nitro,
             overview=True,
             all_random=True,
-            sim_controls=sim_controls
+            sim_controls=sim_controls,
+            weather_table=weather_table
         )
         if baseline_run:
             return df
